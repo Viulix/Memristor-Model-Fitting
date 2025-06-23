@@ -3,6 +3,7 @@ import io                          # For byte stream handling (e.g. image buffer
 import inspect                     # For introspection (e.g. argument inspection)
 import warnings                    # To control or suppress warnings
 import datetime                    # For handling timestamps and time formatting
+import sys                         # System-specific parameters and functions
 
 # --- Third-Party Imports ---
 import numpy as np                 # Numerical computing
@@ -32,7 +33,7 @@ from fit_logic import load_txtfile, perform_fit  # File parsing and fitting logi
 # --- Matplotlib Configuration ---
 # Enable Latex in Matplotlib. Requires a LaTeX installation. Disable if not needed.
 plt.rcParams.update({
-    "text.usetex": True,
+    "text.usetex": False, # Switch this for LaTeX rendering on/off
     "font.family": "serif",
     "font.serif": ["Computer Modern Roman"],
 })
@@ -44,7 +45,7 @@ class FitApp(tk.Tk):
         super().__init__()
         self.title("Data Fitting App")
         self.state('zoomed')
-
+        self.protocol("WM_DELETE_WINDOW", self.on_closing)
         # --- Set up the main window layout and style ---
         font_size = 12
         default_font = tkfont.Font(family="Helvetica", size=font_size)
@@ -690,6 +691,10 @@ class FitApp(tk.Tk):
         label.image = photo  # <- Referenz halten, sonst wird Bild gelöscht!
         self.latex_label = label
         self.latex_label.pack(side='left', padx=5)
+
+    def on_closing(self):
+        self.destroy()
+        sys.exit()
         
 
 # Start up
