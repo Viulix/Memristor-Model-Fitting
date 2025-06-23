@@ -33,9 +33,7 @@ from fit_logic import load_txtfile, perform_fit  # File parsing and fitting logi
 # --- Matplotlib Configuration ---
 # Enable Latex in Matplotlib. Requires a LaTeX installation. Disable if not needed.
 plt.rcParams.update({
-    "text.usetex": False, # Switch this for LaTeX rendering on/off
-    "font.family": "serif",
-    "font.serif": ["Computer Modern Roman"],
+    "text.usetex": True, # Switch this for LaTeX rendering on/off
 })
 
 
