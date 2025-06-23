@@ -1,0 +1,13 @@
+# Fits saved on 2025-06-16T11:32:29.806191
+Fit 1: Model: Schottky emission, Method: curve_fit, Range: [0.0029436, 0.44214]
+Equation: $J = A^* T^2 e^{-\frac{q(\phi_B - \beta \sqrt{E})}{k_B T}}$
+A = 6.5945e-16
+phi_B = 1
+epsilon_r = 1.1024e-08
+
+Fit 2: Model: Trap-assisted tunneling, Method: curve_fit, Range: [0.4858, 1.2079]
+Equation: $J = A_0 e^{-\frac{8\pi\sqrt{2m^*}(\phi_T)^{3/2}}{3hE}}$
+A0 = 0.00038536
+m_eff = 515.53
+phi_T = 43.347
+

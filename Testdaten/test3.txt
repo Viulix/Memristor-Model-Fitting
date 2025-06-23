@@ -1,0 +1,107 @@
+# Fits saved on 2025-06-22T15:31:28.900111
+Fit 1: Model: Schottky emission, Method: leastsq, Range: [-1.197, -0.004807]
+[[Model]]
+    Model(J_schottky)
+[[Fit Statistics]]
+    # fitting method   = leastsq
+    # function evals   = 257
+    # data points      = 24
+    # variables        = 3
+    chi-square         = 2.7271e-17
+    reduced chi-square = 1.2986e-18
+    Akaike info crit   = -985.650551
+    Bayesian info crit = -982.116389
+    R-squared          = 0.99966591
+##  Warning: uncertainties could not be estimated:
+    phi_B:      at initial value
+[[Variables]]
+    A_star:    -3.0154e-17 (init = 1)
+    phi_B:      1.00000000 (init = 1)
+    epsilon_r:  1.9484e-08 (init = 1)
+
+Fit 2: Model: Schottky emission, Method: leastsq, Range: [-0.44141, 0.0021833]
+[[Model]]
+    Model(J_schottky)
+[[Fit Statistics]]
+    # fitting method   = leastsq
+    # function evals   = 180
+    # data points      = 10
+    # variables        = 3
+    chi-square         = 8.3322e-23
+    reduced chi-square = 1.1903e-23
+    Akaike info crit   = -525.419201
+    Bayesian info crit = -524.511445
+    R-squared          = 0.99999992
+##  Warning: uncertainties could not be estimated:
+    phi_B:      at initial value
+[[Variables]]
+    A_star:    -9.3583e-18 (init = 1)
+    phi_B:      1.00000000 (init = 1)
+    epsilon_r: -1.4781e-08 (init = 1)
+
+Fit 3: Model: Schottky emission, Method: leastsq, Range: [-1.1934, -0.47381]
+[[Model]]
+    Model(J_schottky)
+[[Fit Statistics]]
+    # fitting method   = leastsq
+    # function evals   = 264
+    # data points      = 15
+    # variables        = 3
+    chi-square         = 1.2369e-17
+    reduced chi-square = 1.0307e-18
+    Akaike info crit   = -618.590947
+    Bayesian info crit = -616.466797
+    R-squared          = 0.99979542
+##  Warning: uncertainties could not be estimated:
+    phi_B:      at initial value
+[[Variables]]
+    A_star:    -3.6739e-17 (init = 1)
+    phi_B:      1.00000000 (init = 1)
+    epsilon_r: -2.0208e-08 (init = 1)
+
+Fit 4: Model: Schottky emission, Method: leastsq, Range: [0.0029436, 1.1693]
+[[Model]]
+    Model(J_schottky)
+[[Fit Statistics]]
+    # fitting method   = leastsq
+    # function evals   = 192
+    # data points      = 24
+    # variables        = 3
+    chi-square         = 2.0539e-11
+    reduced chi-square = 9.7803e-13
+    Akaike info crit   = -660.882402
+    Bayesian info crit = -657.348240
+    R-squared          = 0.99022488
+##  Warning: uncertainties could not be estimated:
+    phi_B:      at initial value
+[[Variables]]
+    A_star:     1.6489e-13 (init = 1)
+    phi_B:      1.00000000 (init = 1)
+    epsilon_r: -4.2248e-08 (init = 1)
+
+Fit 5: Model: Schottky emission, Method: leastsq, Range: [0.014681, 1.161]
+[[Model]]
+    Model(J_schottky)
+[[Fit Statistics]]
+    # fitting method   = leastsq
+    # function evals   = 380
+    # data points      = 24
+    # variables        = 3
+    chi-square         = 9.3730e-13
+    reduced chi-square = 4.4633e-14
+    Akaike info crit   = -734.971780
+    Bayesian info crit = -731.437619
+    R-squared          = 0.99819050
+##  Warning: uncertainties could not be estimated:
+    phi_B:      at initial value
+[[Variables]]
+    A_star:     2.4005e-19 (init = 1)
+    phi_B:      1.00000000 (init = 1)
+    epsilon_r:  5.8470e-09 (init = 1)
+
+Fit 6: Model: interpolated_high, Method: spline, Range: [-1.2, 1.2]
+Int. fit (spline) for high
+
+Fit 7: Model: interpolated_low, Method: spline, Range: [-1.2, 1.2]
+Int. fit (spline) for low
+
