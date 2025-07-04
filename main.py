@@ -113,7 +113,7 @@ class FitApp(tk.Tk):
         # Fit method selection
         ttk.Label(action_frame, text="Fit Method:").pack(side='left', padx=(20, 0))
         self.fitmethod_var = tk.StringVar()
-        method_options = ["leastsq", "least_squares", "ampgo"]
+        method_options = ["leastsq", "least_squares", "ampgo", "nelder", "powell", "differential_evolution", "basinhopping"]
         self.fitmethod_var.set(method_options[0])
         fitmethod_menu = ttk.OptionMenu(action_frame, self.fitmethod_var, method_options[0], *method_options)
         fitmethod_menu.pack(side='left', padx=5)
