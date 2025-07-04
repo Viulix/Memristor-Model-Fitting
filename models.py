@@ -93,8 +93,7 @@ def J_variable_range_hopping(E, sigma_0, T0):
 
 def J_trap_assisted_tunneling(E, A, m_eff, phi_T):
     phi_T_J = phi_T * q
-    E = np.where(E > zeroBuffer, E, zeroBuffer)  # Avoid division by zero  
-    exponent = 8 * np.pi * np.sqrt(2 * q * np.abs(m_eff)) * (np.abs(phi_T_J))**1.5 / (3 * h * E) 
+    exponent = 8 * np.pi * np.sqrt(2 * q * np.abs(m_eff)) * (np.abs(phi_T_J))**1.5 / (3 * h * np.abs(E))
     J = A * np.exp(exponent)
     return J
 
@@ -188,7 +187,7 @@ models = {
     'Trap-assisted tunneling': {
         'func': J_trap_assisted_tunneling,
         'params': {
-            'A0':     {'init': 1,   'min': -np.inf,  'max': np.inf},
+            'A':     {'init': 1,   'min': -np.inf,  'max': np.inf},
             'm_eff':  {'init': 1,   'min': 0,        'max': np.inf},
             'phi_T':  {'init': 1,   'min': 0,        'max': np.inf},
         },
