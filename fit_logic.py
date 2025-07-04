@@ -171,7 +171,9 @@ def perform_fit(x, y, model_key, method='leastsq'):
                 print(f"Warning: Parameter '{param}' couldn't be set. Exception: {e}")
 
     root.destroy()
-
+    # Ensure input data is float64 for numerical stability
+    x = np.asarray(x, dtype=np.float64)
+    y = np.asarray(y, dtype=np.float64)
     # Performs the fit using the specified method.
     result = model.fit(y, params, E=x, method=method)
     return result
