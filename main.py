@@ -82,6 +82,14 @@ class FitApp(tk.Tk):
         file_entry.pack(side='left', padx=5)
         ttk.Button(file_frame, text="Browse...", command=self.browse_file).pack(side='left')
 
+        # --- Area and thickness inputfields ---
+        ttk.Label(file_frame, text="Area in um²:").pack(side='left', padx=(10, 5))
+        self.new_area = tk.StringVar(value="625")
+        ttk.Entry(file_frame, textvariable=self.new_area, width=10).pack(side='left', padx=5)
+        ttk.Label(file_frame, text="Thickness in nm:").pack(side='left')
+        self.new_thickness = tk.StringVar(value="10")
+        ttk.Entry(file_frame, textvariable=self.new_thickness, width=10).pack(side='left', padx=5)
+
         # --- Subset selection ---
         subset_frame = ttk.Frame(self)
         subset_frame.pack(padx=10, pady=5, fill='x')
@@ -99,7 +107,7 @@ class FitApp(tk.Tk):
         model_names = list(models.keys())
         if model_names:
             self.model_var.set(model_names[0])
-        model_menu = ttk.OptionMenu(action_frame, self.model_var, model_names[0] if           model_names else "", *model_names, command= lambda _: self.update_latex_display())
+        model_menu = ttk.OptionMenu(action_frame, self.model_var, model_names[0] if model_names else "", *model_names, command= lambda _: self.update_latex_display())
         model_menu.pack(side='left', padx=5)
 
         # Fit method selection
@@ -198,7 +206,6 @@ class FitApp(tk.Tk):
         tooltips.ToolTip(saveFitButton, "Save the current fits to a text file with metadata.")
         tooltips.ToolTip(setRangeButton, "Set the fit range through input fields.")
 
-
     def set_manual_range(self):
         """Set a manual range for the selected data."""
         try:
@@ -225,13 +232,17 @@ class FitApp(tk.Tk):
             self.file_var.set(path)
             try:
                 x, y = load_txtfile(path)
+                area_in_um_squared = float(self.new_area.get())
+                thickness_in_nm = float(self.new_thickness.get())
+                x = x / (thickness_in_nm * 1e-9)
+                y = y / (area_in_um_squared * 1e-12)  # Convert to A/m²  
+
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load data: {e}")
                 return
             self.x_all = np.array(x)
             self.y_all = np.array(y)
             n = len(self.x_all)
-            indices = np.arange(n)
             # Determine zero index (closest to zero)
             self.zero_index = int(np.argmin(np.abs(self.x_all)))
             # Determine positive peak and return
@@ -315,7 +326,7 @@ class FitApp(tk.Tk):
             else:
                 messagebox.showwarning("Warning", "Cannot determine positive peak/return for HRS; showing positive data.")
                 mask = self.x_all >= 0
-        elif subset == "Negative HRS":
+        elif subset == "Negative LRS":
             if self.neg_peak_index is not None and self.zero_index is not None:
                 start = self.zero_index
                 end = self.neg_peak_index
@@ -325,7 +336,7 @@ class FitApp(tk.Tk):
             else:
                 messagebox.showwarning("Warning", "Cannot determine negative peak/zero for LRS; showing negative data.")
                 mask = self.x_all <= 0
-        elif subset == "Negative LRS":
+        elif subset == "Negative HRS":
             if self.neg_peak_index is not None and self.neg_return_index is not None:
                 start = self.neg_peak_index
                 end = self.neg_return_index
@@ -398,12 +409,13 @@ class FitApp(tk.Tk):
             abs_ys = np.abs(ys)
             abs_ys[abs_ys == 0] = 1e-12
             label = f"{fit.get('label','Fit')}: {fit['model']} ({fit.get('method','')}) [{x_min:.2g}, {x_max:.2g}]"
+
             self.ax_log.plot(xs, abs_ys, label=label)
             self.ax_lin.plot(xs, ys, label=label)
             self.ax_log.set_title("Logarithmic Plot")
             self.ax_lin.set_title("Linear Plot")
 
-        for ax, ylabel in zip([self.ax_log, self.ax_lin], ['|I| (log)', 'I (linear)']):
+        for ax, ylabel in zip([self.ax_log, self.ax_lin], ['|I| / A', 'I / A']):
             ax.set_xlabel('U')
             ax.set_ylabel(ylabel)
             ax.legend(loc='best')
