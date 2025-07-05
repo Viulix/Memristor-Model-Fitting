@@ -35,9 +35,6 @@ plt.rcParams.update({
     "text.usetex": True, # Switch this for LaTeX rendering on/off
 })
 
-# --- Font Configuration ---
-# Add custom fonts for the application. If you remove these lines, it will fallback to the default font.
-
 
 class FitApp(tk.Tk):
     def __init__(self):
@@ -813,7 +810,6 @@ class FitApp(tk.Tk):
         self.destroy()
         sys.exit()
         
-
 # Start up
 if __name__ == "__main__":
     app = FitApp()
