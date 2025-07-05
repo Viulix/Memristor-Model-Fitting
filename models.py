@@ -87,7 +87,7 @@ def J_variable_range_hopping(E, sigma_0, T0, T):
 
 def J_trap_assisted_tunneling(E, A, m_eff, phi_T):
     phi_T_J = phi_T * q
-    exponent = - 8 * np.pi * np.sqrt(2 * q * np.abs(m_eff)) * (np.abs(phi_T_J))**1.5 / (3 * h * np.abs(E))
+    exponent = - 8 * np.pi * np.sqrt(2 * q * np.abs(m_eff)) * (np.abs(phi_T_J))**1.5 / (3 * h * E)
     J = A * np.exp(exponent)
     return J
 
