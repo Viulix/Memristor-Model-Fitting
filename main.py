@@ -21,7 +21,6 @@ from tkinter import (
     filedialog,     # File dialogs (open/save)
     ttk,            # Themed widgets
     messagebox,     # Dialog popups (info/warning/error)
-    simpledialog,   # Input dialog
     font as tkfont  # Font handling
 )
 import tooltips
