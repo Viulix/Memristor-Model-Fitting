@@ -94,3 +94,97 @@ class ParamDialog(tk.Toplevel):
     def on_cancel(self):
         self.result = None
         self.destroy()
+
+def info_messagebox(title, message, font=("Helvetica", 12), width=400, height=200):
+    win = tk.Toplevel()
+    win.withdraw()  # Fenster unsichtbar machen, bevor es gezeichnet wird
+    win.title(title)
+
+    # Inhalt vorbereiten (muss *vor* dem Messen passieren!)
+    tk.Label(win, text=message, font=font, wraplength=width - 40).pack(padx=20, pady=10)
+    ttk.Button(win, text="OK", command=win.destroy).pack(pady=10)
+
+    win.update_idletasks()  # Jetzt werden Größen und Layouts berechnet
+
+    # Bildschirmmitte berechnen
+    x = win.winfo_screenwidth() // 2 - width // 2
+    y = win.winfo_screenheight() // 2 - height // 2
+
+    # Größe und Position setzen
+    win.geometry(f"{width}x{height}+{x}+{y}")
+    win.deiconify()  # Fenster sichtbar machen
+
+    win.focus_set()  # Optional: Fokus setzen
+
+def error_messagebox(title, message, font=("Helvetica", 12), width=350, height=150):
+    win = tk.Toplevel()
+    win.withdraw()  # Fenster unsichtbar machen, bevor es gezeichnet wird
+    win.title(title)
+
+    # Fehlersound abspielen (nur auf Windows garantiert verfügbar)
+    try:
+        win.bell()
+    except Exception:
+        pass
+
+    # Inhalt vorbereiten (muss *vor* dem Messen passieren!)
+    tk.Label(win, text=message, font=font, wraplength=width - 40, justify="left").pack(padx=20, pady=10)
+    ttk.Button(win, text="OK", command=win.destroy).pack(pady=10)
+    win.iconbitmap("error")  # Fehler-Icon setzen (nur auf Windows)
+
+    win.update_idletasks()  # Jetzt werden Größen und Layouts berechnet
+
+    # Bildschirmmitte berechnen
+    x = win.winfo_screenwidth() // 2 - width // 2
+    y = win.winfo_screenheight() // 2 - height // 2
+
+    # Größe und Position setzen
+    win.geometry(f"{width}x{height}+{x}+{y}")
+    win.deiconify()  # Fenster sichtbar machen
+
+    win.focus_set()  # Optional: Fokus setzen
+    
+def ask_integer(title="Eingabe erforderlich", prompt="Bitte eine Zahl eingeben:", font=("Helvetica", 12), width=400, height=200):
+    import tkinter as tk
+    from tkinter import ttk
+
+    result = None  # Hier wird das Ergebnis gespeichert
+
+    def on_ok():
+        nonlocal result
+        try:
+            result = int(entry.get())
+            win.destroy()
+        except ValueError:
+            error_label.config(text="Bitte eine gültige ganze Zahl eingeben.")
+
+    def on_cancel():
+        win.destroy()
+
+    win = tk.Toplevel()
+    win.withdraw()
+    win.title(title)
+
+    # Widgets aufbauen
+    tk.Label(win, text=prompt, font=font, wraplength=width - 40).pack(padx=20, pady=(15, 5))
+    entry = ttk.Entry(win, font=font)
+    entry.pack(padx=20)
+    entry.focus()
+
+    error_label = tk.Label(win, text="", font=(font[0], font[1] - 2), fg="red")
+    error_label.pack(pady=(5, 0))
+
+    button_frame = ttk.Frame(win)
+    button_frame.pack(pady=15)
+
+    ttk.Button(button_frame, text="OK", command=on_ok).pack(side="left", padx=10)
+    ttk.Button(button_frame, text="Abbrechen", command=on_cancel).pack(side="left", padx=10)
+
+    win.update_idletasks()
+    x = win.winfo_screenwidth() // 2 - width // 2
+    y = win.winfo_screenheight() // 2 - height // 2
+    win.geometry(f"{width}x{height}+{x}+{y}")
+    win.deiconify()
+    win.wait_window()  # Warte, bis das Fenster geschlossen wird
+
+    return result
