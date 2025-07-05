@@ -69,6 +69,10 @@ class FitApp(tk.Tk):
         self.neg_peak_index = None
         self.neg_return_index = None
         self.zero_index = None
+
+        # Rohdaten speichern
+        self.raw_x = None
+        self.raw_y = None
         
         # LaTeX rendering temporary variable
         self.latex_label = None
@@ -92,6 +96,10 @@ class FitApp(tk.Tk):
         ttk.Label(file_frame, text="Temperature in K:").pack(side='left')
         self.new_temperature = tk.StringVar(value="300")
         ttk.Entry(file_frame, textvariable=self.new_temperature, width=10).pack(side='left', padx=5)
+
+        # Änderungen an Area/Thickness triggern Update
+        self.new_area.trace_add("write", lambda *args: self.on_area_thickness_change())
+        self.new_thickness.trace_add("write", lambda *args: self.on_area_thickness_change())
 
         # --- Subset selection ---
         subset_frame = ttk.Frame(self)
@@ -235,26 +243,44 @@ class FitApp(tk.Tk):
             self.file_var.set(path)
             try:
                 x, y = load_txtfile(path)
-                area_in_um_squared = float(self.new_area.get())
-                thickness_in_nm = float(self.new_thickness.get())
-                x = x / (thickness_in_nm * 1e-9)
-                y = y / (area_in_um_squared * 1e-12)  # Convert to A/m²  
-
+                self.raw_x = np.array(x)
+                self.raw_y = np.array(y)
+                self.update_scaled_data()
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to load data: {e}")
                 return
-            self.x_all = np.array(x)
-            self.y_all = np.array(y)
+            # Reset fits and temp
+            self.fits.clear()
+            self.temp_fit = None
+            self.selected_range = None
+            self.range_label.config(text="None")
+            self.update_fit_list()
+            # Apply subset and plot
+            self.apply_subset()
+
+    def on_area_thickness_change(self):
+        """Callback wenn Area oder Thickness geändert werden."""
+        if self.raw_x is not None and self.raw_y is not None:
+            self.update_scaled_data()
+            self.apply_subset()
+
+    def update_scaled_data(self):
+        """Berechnet x_all und y_all aus raw_x/raw_y und aktuellen Area/Thickness."""
+        try:
+            area_in_um_squared = float(self.new_area.get())
+            thickness_in_nm = float(self.new_thickness.get())
+            x = np.array(self.raw_x) / (thickness_in_nm * 1e-9)
+            y = np.array(self.raw_y) / (area_in_um_squared * 1e-12)
+            self.x_all = x
+            self.y_all = y
+            # Peak/Zero-Indices neu berechnen
             n = len(self.x_all)
-            # Determine zero index (closest to zero)
             self.zero_index = int(np.argmin(np.abs(self.x_all)))
-            # Determine positive peak and return
             pos_indices = np.where(self.x_all >= 0)[0]
             if pos_indices.size > 0:
                 max_val = np.max(self.x_all[pos_indices])
                 peak_idxs = np.where(self.x_all == max_val)[0]
                 self.pos_peak_index = int(peak_idxs[0]) if peak_idxs.size > 0 else None
-                # find return to zero after peak
                 self.pos_return_index = None
                 if self.pos_peak_index is not None and self.pos_peak_index+1 < n:
                     close_zero = np.where(np.isclose(self.x_all[self.pos_peak_index+1:], 0, atol=1e-6))[0]
@@ -263,7 +289,6 @@ class FitApp(tk.Tk):
             else:
                 self.pos_peak_index = None
                 self.pos_return_index = None
-            # Determine negative peak and return
             neg_indices = np.where(self.x_all <= 0)[0]
             if neg_indices.size > 0:
                 min_val = np.min(self.x_all[neg_indices])
@@ -277,15 +302,8 @@ class FitApp(tk.Tk):
             else:
                 self.neg_peak_index = None
                 self.neg_return_index = None
-
-            # Reset fits and temp
-            self.fits.clear()
-            self.temp_fit = None
-            self.selected_range = None
-            self.range_label.config(text="None")
-            self.update_fit_list()
-            # Apply subset and plot
-            self.apply_subset()
+        except Exception:
+            pass
 
     def apply_subset(self):
         """
@@ -368,8 +386,8 @@ class FitApp(tk.Tk):
         if self.current_x is not None:
             abs_y = np.abs(self.current_y)
             abs_y[abs_y == 0] = 1e-12  # keine Nullwerte im Log-Plot
-            self.ax_log.scatter(self.current_x, abs_y, label='|I(U)|', s=20)
-            self.ax_lin.scatter(self.current_x, self.current_y, label='I(U)', s=20)
+            self.ax_log.scatter(self.current_x, abs_y, label='J-Data', s=20)
+            self.ax_lin.scatter(self.current_x, self.current_y, label='J-Data', s=20)
 
         subset = self.subset_var.get()
         fits_to_plot = self.fits + ([self.temp_fit] if self.temp_fit else [])
@@ -418,10 +436,13 @@ class FitApp(tk.Tk):
             self.ax_log.set_title("Logarithmic Plot")
             self.ax_lin.set_title("Linear Plot")
 
-        for ax, ylabel in zip([self.ax_log, self.ax_lin], ['|I| / A', 'I / A']):
-            ax.set_xlabel('U')
-            ax.set_ylabel(ylabel)
-            ax.legend(loc='best')
+        # Achsenbeschriftungen und Legende in LaTeX, falls aktiviert
+        use_latex = plt.rcParams.get("text.usetex", False)
+        for ax, ylabel in zip([self.ax_log, self.ax_lin], [r'$|J|\,\mathrm{in}\,\mathrm{A/m^2}$', r'$I\,\mathrm{in}\,\mathrm{A/m^2}$']):
+            ax.set_xlabel(r'$E\,\mathrm{in}\,\mathrm{V/m}$' if use_latex else 'E in V/m', fontsize=15)
+            ax.set_ylabel(ylabel if use_latex else ylabel.replace('$', ''), fontsize=15)
+            ax.tick_params(axis='both', labelsize=14)
+            ax.legend(loc='best', fontsize=13)
             ax.grid(True)
 
         self.fig.tight_layout()
