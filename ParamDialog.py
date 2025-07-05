@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-
+import os
 
 class ParamDialog(tk.Toplevel):
     def __init__(self, parent, param_names, default_p0=None, default_bounds=None):
@@ -95,56 +95,78 @@ class ParamDialog(tk.Toplevel):
         self.result = None
         self.destroy()
 
-def info_messagebox(title, message, font=("Helvetica", 12), width=400, height=200):
+def info_messagebox(title, message, font=("Helvetica", 12), width=None, height=None):
     win = tk.Toplevel()
-    win.withdraw()  # Fenster unsichtbar machen, bevor es gezeichnet wird
+    win.withdraw()
     win.title(title)
 
-    # Inhalt vorbereiten (muss *vor* dem Messen passieren!)
-    tk.Label(win, text=message, font=font, wraplength=width - 40).pack(padx=20, pady=10)
+    # Label erzeugen, aber noch nicht packen
+    label = tk.Label(win, text=message, font=font, justify="left")
+    label.pack(padx=20, pady=10)
     ttk.Button(win, text="OK", command=win.destroy).pack(pady=10)
+    try:
+        win.iconbitmap("./icons/info.ico")  # für info_messagebox
+    except Exception as e:
+        pass
 
-    win.update_idletasks()  # Jetzt werden Größen und Layouts berechnet
+    win.update_idletasks()
+
+    # Automatische Größenberechnung, falls width/height nicht gesetzt
+    if width is None or height is None:
+        # Labelgröße berechnen
+        label.update_idletasks()
+        req_width = label.winfo_reqwidth() + 40  # Padding berücksichtigen
+        req_height = label.winfo_reqheight() + 80  # Padding + Button
+        width = req_width if width is None else width
+        height = req_height if height is None else height
 
     # Bildschirmmitte berechnen
     x = win.winfo_screenwidth() // 2 - width // 2
     y = win.winfo_screenheight() // 2 - height // 2
 
-    # Größe und Position setzen
     win.geometry(f"{width}x{height}+{x}+{y}")
-    win.deiconify()  # Fenster sichtbar machen
+    win.deiconify()
+    win.focus_set()
 
-    win.focus_set()  # Optional: Fokus setzen
-
-def error_messagebox(title, message, font=("Helvetica", 12), width=350, height=150):
+def error_messagebox(title, message, font=("Helvetica", 12), width=None, height=None):
     win = tk.Toplevel()
-    win.withdraw()  # Fenster unsichtbar machen, bevor es gezeichnet wird
+    win.withdraw()
     win.title(title)
 
-    # Fehlersound abspielen (nur auf Windows garantiert verfügbar)
     try:
         win.bell()
     except Exception:
         pass
 
-    # Inhalt vorbereiten (muss *vor* dem Messen passieren!)
-    tk.Label(win, text=message, font=font, wraplength=width - 40, justify="left").pack(padx=20, pady=10)
+    # Label erzeugen, aber noch nicht packen
+    label = tk.Label(win, text=message, font=font, justify="left")
+    label.pack(padx=20, pady=10)
     ttk.Button(win, text="OK", command=win.destroy).pack(pady=10)
-    win.iconbitmap("error")  # Fehler-Icon setzen (nur auf Windows)
+    try:
+        win.iconbitmap("./icons/error.ico")  # für error_messagebox
+    except Exception as e:
+        pass
 
-    win.update_idletasks()  # Jetzt werden Größen und Layouts berechnet
+    win.update_idletasks()
+
+    # Automatische Größenberechnung, falls width/height nicht gesetzt
+    if width is None or height is None:
+        # Labelgröße berechnen
+        label.update_idletasks()
+        req_width = label.winfo_reqwidth() + 40  # Padding berücksichtigen
+        req_height = label.winfo_reqheight() + 80  # Padding + Button
+        width = req_width if width is None else width
+        height = req_height if height is None else height
 
     # Bildschirmmitte berechnen
     x = win.winfo_screenwidth() // 2 - width // 2
     y = win.winfo_screenheight() // 2 - height // 2
 
-    # Größe und Position setzen
     win.geometry(f"{width}x{height}+{x}+{y}")
-    win.deiconify()  # Fenster sichtbar machen
+    win.deiconify()
+    win.focus_set()
 
-    win.focus_set()  # Optional: Fokus setzen
-    
-def ask_integer(title="Eingabe erforderlich", prompt="Bitte eine Zahl eingeben:", font=("Helvetica", 12), width=400, height=200):
+def ask_integer(title="Input Required", prompt="Please enter a number:", font=("Helvetica", 12), width=400, height=200):
     import tkinter as tk
     from tkinter import ttk
 
@@ -156,7 +178,7 @@ def ask_integer(title="Eingabe erforderlich", prompt="Bitte eine Zahl eingeben:"
             result = int(entry.get())
             win.destroy()
         except ValueError:
-            error_label.config(text="Bitte eine gültige ganze Zahl eingeben.")
+            error_label.config(text="Please submit a valid integer.")
 
     def on_cancel():
         win.destroy()
@@ -178,7 +200,7 @@ def ask_integer(title="Eingabe erforderlich", prompt="Bitte eine Zahl eingeben:"
     button_frame.pack(pady=15)
 
     ttk.Button(button_frame, text="OK", command=on_ok).pack(side="left", padx=10)
-    ttk.Button(button_frame, text="Abbrechen", command=on_cancel).pack(side="left", padx=10)
+    ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side="left", padx=10)
 
     win.update_idletasks()
     x = win.winfo_screenwidth() // 2 - width // 2
