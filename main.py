@@ -21,10 +21,9 @@ from tkinter import (
     filedialog,     # File dialogs (open/save)
     ttk,            # Themed widgets
     messagebox,     # Dialog popups (info/warning/error)
-    font as tkfont  # Font handling
 )
+import tkinter.font as tkfont  # Font handling for Tkinter
 import tooltips
-
 # --- Local Application Imports ---
 from models import models           # Model definitions. Contains the functions and parameters for fitting models.
 from fit_logic import load_txtfile, perform_fit  # File parsing and fitting logic
@@ -36,6 +35,9 @@ plt.rcParams.update({
     "text.usetex": True, # Switch this for LaTeX rendering on/off
 })
 
+# --- Font Configuration ---
+# Add custom fonts for the application. If you remove these lines, it will fallback to the default font.
+
 
 class FitApp(tk.Tk):
     def __init__(self):
@@ -46,19 +48,19 @@ class FitApp(tk.Tk):
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         # --- Set up the main window layout and style ---
         font_size = 12
-        default_font = tkfont.Font(family="Helvetica", size=font_size)
         style = ttk.Style(self)
         # Set window background to white
         self.configure(bg="white")
         style.configure(".", background="white")  # Set ttk default background
 
-        # Try to use "Outfit" font if available, else fallback to Helvetica
         try:
-            outfit_font = tkfont.Font(family="Outfit SemiBold", size=font_size)
-            self.out_fit_sec = tkfont.Font(family="Outfit Regular", size=font_size)
-            self.default_font = outfit_font
-        except tk.TclError:
-            self.default_font = tkfont.Font(family="Helvetica", size=font_size)
+            self.default_font = tkfont.Font(family="Segoe UI", size=font_size, weight="bold")
+            self.out_fit_sec = tkfont.Font(family="Segoe UI", size=font_size)
+
+        except Exception as e:
+            print(f"Error: {e}")
+            # Fallback
+            self.default_font = tkfont.Font(family="Helvetica", size=font_size, weight="bold")
             self.out_fit_sec = tkfont.Font(family="Helvetica", size=font_size)
 
         style.configure("TButton", font=self.default_font)
@@ -79,8 +81,6 @@ class FitApp(tk.Tk):
         # Remove border from result_text (Text widget)
         self.option_add("*Text.borderWidth", 0)
         self.option_add("*Text.highlightThickness", 0)
-
-
 
 
         # --- Data storage ---
@@ -245,6 +245,12 @@ class FitApp(tk.Tk):
         # --- Horizontal separator ---
         separator = ttk.Separator(self, orient='horizontal')
         separator.pack(fill='x', padx=10, pady=5)
+        
+        # --- Fit Result Header ---
+        header_font = tkfont.Font(family="Segoe UI", size=font_size + 4, weight="bold")
+        header_label = tk.Label(self, text="Fit Result", font=header_font, bg="white")
+        header_label.pack(padx=10, pady=(5, 0), anchor='w')
+        
         # --- Results text ---
         self.result_text = tk.Text(self, height=16, wrap='word', font=self.out_fit_sec)
         self.result_text.pack(padx=10, pady=5, fill='x')
@@ -561,8 +567,7 @@ class FitApp(tk.Tk):
             'state': state
         }
         # Display results
-        self.result_text.delete('1.0', tk.END)
-        self.result_text.insert(tk.END, fit_result.fit_report())
+        self.display_fit_result(fit_result)
 
         if fit_warnings:
             self.result_text.insert(tk.END, "\n--- Runtime-Warnings---\n")
@@ -589,16 +594,16 @@ class FitApp(tk.Tk):
         """Remove the selected fit from the fit listbox."""
         sel = self.fit_listbox.curselection()
         if not sel:
-            messagebox.showerror("Error", "No fit selected to remove.")
+            error_messagebox("Error", "No fit selected to remove.", font=self.out_fit_sec, width=300, height=120)
             return
         idx = sel[0]
         if 0 <= idx < len(self.fits):
             del self.fits[idx]
             self.update_fit_list()
             self.plot_data()
-            messagebox.showinfo("Removed", "Selected fit removed.")
+            info_messagebox("Removed", "Selected fit removed.", font=self.out_fit_sec, width=300, height=120)
         else:
-            messagebox.showerror("Error", "Invalid selection.")
+            error_messagebox("Error", "Invalid selection.", font=self.out_fit_sec, width=300, height=120)
 
     def update_fit_list(self):
         """Update the fit listbox with the current fits."""
@@ -630,6 +635,37 @@ class FitApp(tk.Tk):
             messagebox.showinfo("Saved", f"Fits saved to {save_path}")
         except Exception as e:
             messagebox.showerror("Save Error", f"Failed to save fits: {e}")
+    
+    def display_fit_result(self, fit_result):
+
+        self.result_text.configure(state='normal')
+        self.result_text.delete('1.0', tk.END)
+
+        # Set monospaced font
+        self.result_text.configure(font=self.out_fit_sec)
+
+        # Insert full report
+        report = fit_result.fit_report()
+        report = report.replace("[[", "[")
+        report = report.replace("]]", "]") 
+        self.result_text.insert(tk.END, report)
+
+        # Highlighting basic structure (simple, optional)
+        self.result_text.tag_configure('header', font=self.default_font)
+        self.result_text.tag_configure('warning', foreground='red')
+        self.result_text.tag_configure('success', foreground='green')
+        self.result_text.tag_configure('number', foreground='blue')
+
+        # Tag headers like '[Model]', '[Fit Statistics]' etc.
+        for line_num, line in enumerate(report.splitlines(), 1):
+            if line.strip().startswith('['):  # headings
+                self.result_text.tag_add('header', f"{line_num}.0", f"{line_num}.end")
+            elif "WARNING" in line or "error" in line.lower():
+                self.result_text.tag_add('warning', f"{line_num}.0", f"{line_num}.end")
+            elif "success" in line.lower():
+                self.result_text.tag_add('success', f"{line_num}.0", f"{line_num}.end")
+
+        self.result_text.configure(state='disabled')
     
     def interpolate_fits(self):
         """Interpolate fits for the selected states (high and low) using a spline. Uses the selected polynomial degree, which is asked from the user.
@@ -674,7 +710,7 @@ class FitApp(tk.Tk):
 
         # If both are missing, nothing to do
         if xs_high is None and xs_low is None:
-            messagebox.showwarning("Interpolation", "Not enough fits with state 'high' or 'low' for interpolation.")
+            error_messagebox("Interpolation", "Not enough fits with state 'high' or 'low' for interpolation.")
             return
 
         # Interpolate high if possible and not already done
@@ -684,7 +720,7 @@ class FitApp(tk.Tk):
                 spline_high = make_interp_spline(xs_high, ys_high, k=k)
                 ys_high_interp = spline_high(xs_interp_high)
             except Exception as e:
-                messagebox.showerror("Interpolation Error", f"Interpolation failed for state 'high': {e}")
+                error_messagebox("Interpolation Error", f"Interpolation failed for state 'high': {e}")
                 return
             interp_high = {
                 'model': 'interpolated_high',
@@ -709,7 +745,7 @@ class FitApp(tk.Tk):
                 spline_low = make_interp_spline(xs_low, ys_low, k=k)
                 ys_low_interp = spline_low(xs_interp_low)
             except Exception as e:
-                messagebox.showerror("Interpolation Error", f"Interpolation failed for state 'low': {e}")
+                error_messagebox("Interpolation Error", f"Interpolation failed for state 'low': {e}")
                 return
             interp_low = {
                 'model': 'interpolated_low',
