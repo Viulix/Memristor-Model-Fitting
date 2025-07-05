@@ -1,6 +1,5 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-import os
 
 class ParamDialog(tk.Toplevel):
     def __init__(self, parent, param_names, default_p0=None, default_bounds=None):
@@ -167,9 +166,6 @@ def error_messagebox(title, message, font=("Helvetica", 12), width=None, height=
     win.focus_set()
 
 def ask_integer(title="Input Required", prompt="Please enter a number:", font=("Helvetica", 12), width=400, height=200):
-    import tkinter as tk
-    from tkinter import ttk
-
     result = None  # Hier wird das Ergebnis gespeichert
 
     def on_ok():
@@ -193,14 +189,17 @@ def ask_integer(title="Input Required", prompt="Please enter a number:", font=("
     entry.pack(padx=20)
     entry.focus()
 
-    error_label = tk.Label(win, text="", font=(font[0], font[1] - 2), fg="red")
+    error_label = tk.Label(win, text="", font=font, fg="red")
     error_label.pack(pady=(5, 0))
 
     button_frame = ttk.Frame(win)
     button_frame.pack(pady=15)
 
-    ttk.Button(button_frame, text="OK", command=on_ok).pack(side="left", padx=10)
-    ttk.Button(button_frame, text="Cancel", command=on_cancel).pack(side="left", padx=10)
+    ok_button = ttk.Button(button_frame, text="OK", command=on_ok)
+    cancel_button = ttk.Button(button_frame, text="Cancel", command=on_cancel)
+
+    ok_button.pack(side="left")
+    cancel_button.pack(side="left")
 
     win.update_idletasks()
     x = win.winfo_screenwidth() // 2 - width // 2
@@ -208,5 +207,4 @@ def ask_integer(title="Input Required", prompt="Please enter a number:", font=("
     win.geometry(f"{width}x{height}+{x}+{y}")
     win.deiconify()
     win.wait_window()  # Warte, bis das Fenster geschlossen wird
-
     return result
