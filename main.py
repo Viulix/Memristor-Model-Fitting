@@ -82,13 +82,16 @@ class FitApp(tk.Tk):
         file_entry.pack(side='left', padx=5)
         ttk.Button(file_frame, text="Browse...", command=self.browse_file).pack(side='left')
 
-        # --- Area and thickness inputfields ---
+        # --- Area, thickness and temperature inputfields ---
         ttk.Label(file_frame, text="Area in um²:").pack(side='left', padx=(10, 5))
         self.new_area = tk.StringVar(value="625")
         ttk.Entry(file_frame, textvariable=self.new_area, width=10).pack(side='left', padx=5)
         ttk.Label(file_frame, text="Thickness in nm:").pack(side='left')
         self.new_thickness = tk.StringVar(value="10")
         ttk.Entry(file_frame, textvariable=self.new_thickness, width=10).pack(side='left', padx=5)
+        ttk.Label(file_frame, text="Temperature in K:").pack(side='left')
+        self.new_temperature = tk.StringVar(value="300")
+        ttk.Entry(file_frame, textvariable=self.new_temperature, width=10).pack(side='left', padx=5)
 
         # --- Subset selection ---
         subset_frame = ttk.Frame(self)
@@ -464,7 +467,7 @@ class FitApp(tk.Tk):
         try:
             with warnings.catch_warnings(record=True) as wlist:
                 warnings.simplefilter("always")
-                fit_result = perform_fit(xs, ys, model_key, method=method)
+                fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get())
                 # Alle Warnungen sammeln
                 for w in wlist:
                     fit_warnings += f"Warning: {w.message}\n"

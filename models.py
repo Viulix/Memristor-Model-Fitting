@@ -23,12 +23,11 @@ h   = constants.h                      # Planck constant (J·s)
 hbar = constants.hbar                  # Reduced Planck constant (J·s)
 eps0  = constants.epsilon_0              # Vacuum permittivity (F/m)
 π   = np.pi
-T = 300 # may be adjusted
 
 zeroBuffer = 1e-12
 maxExponent = 200
 
-def J_schottky(E, A, phi_B, epsilon_r):
+def J_schottky(E, A, phi_B, epsilon_r, T):
     # https://de.wikipedia.org/wiki/Edison-Richardson-Effekt
     phi_B_J = phi_B * q
     exponent = - (q * (phi_B_J - np.sqrt(q*np.abs(E) / (4*np.pi * epsilon_r * eps0)))) / (kB * T)
@@ -52,14 +51,14 @@ def J_direct_tunneling(E, m_eff, phi_B, kappa, t_ox):
     return J
 
 ### Korrigiert, aber ungenau (?) -> wie ein Dauerhafter Offset. ggf mit Widerstand abgleichen
-def J_ohmic(E, mu, N_C, E_C, E_F):
+def J_ohmic(E, mu, N_C, E_C, E_F, T):
     exponent = - (E_C - E_F) / (kB * T)
     exponent = np.where(exponent > 200, maxExponent, exponent)
     J = q * mu * N_C * E * np.exp(exponent)
     return J
 
 ### Hier vers. Formeln gefunden. Eine mit E und eine mit V. Implementiert ist die mit E.
-def J_poole_frenkel(E, mu, N_C, phi_T, epsilon_r):
+def J_poole_frenkel(E, mu, N_C, phi_T, epsilon_r, T):
     # https://en.wikipedia.org/wiki/Poole%E2%80%93Frenkel_effect
     phi_T_J = phi_T * q
     epsilon = eps0 * epsilon_r
@@ -78,15 +77,15 @@ def J_space_charge_limited(E, mu, epsilon_r, theta, d):
     return J
 
 ### Das sigma_0 ist nicht in der Formel enthalten, sondern wird als Vorfaktor verwendet (da lediglich proportional zu E)
-def J_ionic(E, dG, sigma_0):
+def J_ionic(E, dG, sigma_0, T):
     exponent = - dG / (kB * T)
     return sigma_0 * (E / T) * np.exp(exponent)
 
-def J_nearest_neighbor_hopping(E, sigma_0, T0):
+def J_nearest_neighbor_hopping(E, sigma_0, T0, T):
     exponent = - T0 / T
     return sigma_0 * np.exp(exponent) * E
 
-def J_variable_range_hopping(E, sigma_0, T0):
+def J_variable_range_hopping(E, sigma_0, T0, T):
     if T0 < 0: T0 = 0
     exponent = - (T0 / T)**0.25
     return sigma_0 * np.exp(exponent) * E

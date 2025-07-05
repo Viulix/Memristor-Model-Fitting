@@ -28,7 +28,7 @@ def load_txtfile(pfad, delimiter=None, skiprows=3, usecols=(0, 1)):
     y = data[:, 1]
     return x, y
 
-def perform_fit(x, y, model_key, method='leastsq'):
+def perform_fit(x, y, model_key, method='leastsq', T=None):
     """
     Performs a fit on the provided data using the specified model and method with lmfit.
     Parameters:
@@ -175,5 +175,9 @@ def perform_fit(x, y, model_key, method='leastsq'):
     x = np.asarray(x, dtype=np.float64)
     y = np.asarray(y, dtype=np.float64)
     # Performs the fit using the specified method.
+    # If temperature T is provided, add it as a constant parameter (not fitted)
+    if T is not None:
+        params.add('T', value=np.float64(T), vary=False)
+
     result = model.fit(y, params, E=x, method=method)
     return result
