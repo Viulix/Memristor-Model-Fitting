@@ -31,7 +31,6 @@ def J_schottky(E, A, phi_B, epsilon_r, T):
     # https://de.wikipedia.org/wiki/Edison-Richardson-Effekt
     phi_B_J = phi_B * q
     exponent = - (q * (phi_B_J - np.sqrt(q*np.abs(E) / (4*np.pi * epsilon_r * eps0)))) / (kB * T)
-    exponent = np.where(exponent > 200, maxExponent, exponent)  # Avoid overflow
     J = A * T**2 * np.exp(exponent)
     return J
 
@@ -53,7 +52,6 @@ def J_direct_tunneling(E, m_eff, phi_B, kappa, t_ox):
 ### Korrigiert, aber ungenau (?) -> wie ein Dauerhafter Offset. ggf mit Widerstand abgleichen
 def J_ohmic(E, mu, N_C, E_C, E_F, T):
     exponent = - (E_C - E_F) / (kB * T)
-    exponent = np.where(exponent > 200, maxExponent, exponent)
     J = q * mu * N_C * E * np.exp(exponent)
     return J
 
@@ -62,10 +60,7 @@ def J_poole_frenkel(E, mu, N_C, phi_T, epsilon_r, T):
     # https://en.wikipedia.org/wiki/Poole%E2%80%93Frenkel_effect
     phi_T_J = phi_T * q
     epsilon = eps0 * epsilon_r
-
     exponent = -q * (phi_T_J - np.sqrt(q * np.abs(E) / (π * epsilon))) / (kB * T)
-    
-    exponent = np.where(exponent > 200, maxExponent, exponent)
     J = q * mu * N_C * E * np.exp(exponent)
     return J
 
