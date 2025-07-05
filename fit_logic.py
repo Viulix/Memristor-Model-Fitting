@@ -119,13 +119,15 @@ def perform_fit(x, y, model_key, method='leastsq', T=None, primFont=None, secFon
 
     # Invoke dialog
     dialog = BoundsDialog(root, title='Set Parameter Bounds')
+    if dialog.result is None:
+        root.destroy()
+        return None  # User cancelled the dialog
     if hasattr(dialog, 'result'):
         for name, (lo, init, hi) in dialog.result.items():
             try:
                 params[name].set(value=init, min=lo, max=hi)
             except Exception as e:
                 print(f"Warning: Could not set '{name}': {e}")
-
     root.destroy()
     x = np.asarray(x, float)
     y = np.asarray(y, float)
