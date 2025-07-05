@@ -19,11 +19,10 @@ from scipy.interpolate import make_interp_spline           # Smooth curve interp
 import tkinter as tk
 from tkinter import (
     filedialog,     # File dialogs (open/save)
-    ttk,            # Themed widgets
-    messagebox,     # Dialog popups (info/warning/error)
+    ttk       # Themed widgets
 )
 import tkinter.font as tkfont  # Font handling for Tkinter
-import tooltips
+
 # --- Local Application Imports ---
 from models import models           # Model definitions. Contains the functions and parameters for fitting models.
 from fit_logic import load_txtfile, perform_fit  # File parsing and fitting logic
@@ -248,23 +247,20 @@ class FitApp(tk.Tk):
         header_label = tk.Label(self, text="Fit Result", font=header_font, bg="white")
         header_label.pack(padx=10, pady=(5, 0), anchor='w')
         
-        # --- Results text ---
-        self.result_text = tk.Text(self, height=16, wrap='word', font=self.out_fit_sec)
-        self.result_text.pack(padx=10, pady=5, fill='x')
-        self.result_text.bind("<Key>", lambda e: "break")  # Alle Tastatureingaben blockieren
-        self.result_text.config(cursor="arrow") # Cursor auf Pfeil setzen, um Eingabe zu verhindern
+        # --- Results text (side-by-side) ---
+        result_frame = ttk.Frame(self)
+        result_frame.pack(padx=10, pady=5, fill='x')
 
-        # --- Tooltips ---
-        tooltips.ToolTip(file_entry, "Select a data file to load.")
-        tooltips.ToolTip(model_menu, "Select a model to fit the data.")
-        tooltips.ToolTip(fitmethod_menu, "Select the fitting method to use.")
-        tooltips.ToolTip(fitButton, "Fit the selected range of data using the selected model and method.")
-        tooltips.ToolTip(addFitButton, "Add the temporary fit to the list of fits.")
-        tooltips.ToolTip(removeFitButton, "Remove the selected fit from the list.")
-        tooltips.ToolTip(delTempFitButton, "Delete the temporary fit and reset the selection.")
-        tooltips.ToolTip(interpolateButton, "Interpolate fits for the selected states (high and/or low) using a spline.")
-        tooltips.ToolTip(saveFitButton, "Save the current fits to a text file with metadata.")
-        tooltips.ToolTip(setRangeButton, "Set the fit range through input fields.")
+        self.result_text = tk.Text(result_frame, height=16, wrap='word', font=self.out_fit_sec, width=40)
+        self.result_text.pack(side='left')
+        self.result_text.bind("<Key>", lambda e: "break")  # Alle Tastatureingaben blockieren
+        self.result_text.config(cursor="arrow")  # Cursor auf Pfeil setzen, um Eingabe zu verhindern
+
+        self.result_text2 = tk.Text(result_frame, height=16, wrap='word', font=self.out_fit_sec, width=40)
+        self.result_text2.pack(side='left', fill='x', expand=True)
+        self.result_text2.bind("<Key>", lambda e: "break")
+        self.result_text2.config(cursor="arrow")
+
 
     def set_manual_range(self):
         """Set a manual range for the selected data."""
@@ -539,6 +535,8 @@ class FitApp(tk.Tk):
                 # Erzeuge eine kleinere Schriftart (2px kleiner als self.out_fit_sec)
 
                 fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
+                if fit_result is None:
+                    return
                 # Alle Warnungen sammeln
                 for w in wlist:
                     fit_warnings += f"Warning: {w.message}\n"
@@ -567,8 +565,8 @@ class FitApp(tk.Tk):
         self.display_fit_result(fit_result)
 
         if fit_warnings:
-            self.result_text.insert(tk.END, "\n--- Runtime-Warnings---\n")
-            self.result_text.insert(tk.END, fit_warnings)
+            self.result_text2.insert(tk.END, "\n--- Runtime-Warnings---\n")
+            self.result_text2.insert(tk.END, fit_warnings)
         fit_xs = np.linspace(x_min, x_max, 200)
         fit_ys = models[model_key]["func"](fit_xs, *fit_result.best_values.values())
 
@@ -614,7 +612,7 @@ class FitApp(tk.Tk):
     def save_fits(self):
         """Save the current fits to a text file with metadata."""
         if not self.fits:
-            messagebox.showerror("Error", "No fits to save.")
+            error_messagebox("Error", "No fits to save.")
             return
         save_path = filedialog.asksaveasfilename(defaultextension='.txt', filetypes=[('Text files','*.txt'), ('All files','*.*')])
         if not save_path:
@@ -629,40 +627,51 @@ class FitApp(tk.Tk):
                     f.write(f"Fit {idx}: Model: {model_key}, Method: {method}, Range: [{x_min:.5g}, {x_max:.5g}]\n")
                     f.write(f"{fit['resultmessage']}\n")
                     f.write("\n")
-            messagebox.showinfo("Saved", f"Fits saved to {save_path}")
+            info_messagebox("Saved", f"Fits saved to {save_path}")
         except Exception as e:
-            messagebox.showerror("Save Error", f"Failed to save fits: {e}")
-    
+            error_messagebox("Save Error", f"Failed to save fits: {e}")
+
     def display_fit_result(self, fit_result):
-
         self.result_text.configure(state='normal')
+        self.result_text2.configure(state='normal')
+
         self.result_text.delete('1.0', tk.END)
+        self.result_text2.delete('1.0', tk.END)
 
-        # Set monospaced font
         self.result_text.configure(font=self.out_fit_sec)
+        self.result_text2.configure(font=self.out_fit_sec)
 
-        # Insert full report
+        # Fit-Report aufteilen
         report = fit_result.fit_report()
         report = report.replace("[[", "[")
         report = report.replace("]]", "]") 
-        self.result_text.insert(tk.END, report)
+        lines = report.splitlines()
 
-        # Highlighting basic structure (simple, optional)
-        self.result_text.tag_configure('header', font=self.default_font)
-        self.result_text.tag_configure('warning', foreground='red')
-        self.result_text.tag_configure('success', foreground='green')
-        self.result_text.tag_configure('number', foreground='blue')
+        header_lines = []
+        variable_lines = []
+        writing_variables = False
 
-        # Tag headers like '[Model]', '[Fit Statistics]' etc.
-        for line_num, line in enumerate(report.splitlines(), 1):
-            if line.strip().startswith('['):  # headings
-                self.result_text.tag_add('header', f"{line_num}.0", f"{line_num}.end")
-            elif "WARNING" in line or "error" in line.lower():
-                self.result_text.tag_add('warning', f"{line_num}.0", f"{line_num}.end")
-            elif "success" in line.lower():
-                self.result_text.tag_add('success', f"{line_num}.0", f"{line_num}.end")
+        for line in lines:
+            if line.strip().startswith('[Variables]'):
+                writing_variables = True
+            if writing_variables:
+                variable_lines.append(line)
+            else:
+                header_lines.append(line)
 
-        self.result_text.configure(state='disabled')
+        # In die Textfelder einfügen
+        self.result_text.insert(tk.END, '\n'.join(header_lines))
+        self.result_text2.insert(tk.END, '\n'.join(variable_lines))
+
+        # Optional: Überschriften fett machen
+        for text_widget in [self.result_text, self.result_text2]:
+            text_widget.tag_configure('header', font=self.default_font)
+
+            for i, line in enumerate(text_widget.get("1.0", tk.END).splitlines(), 1):
+                if line.strip().startswith('['):
+                    text_widget.tag_add('header', f"{i}.0", f"{i}.end")
+
+            text_widget.configure(state='disabled')
     
     def interpolate_fits(self):
         """Interpolate fits for the selected states (high and low) using a spline. Uses the selected polynomial degree, which is asked from the user.
