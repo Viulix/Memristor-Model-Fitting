@@ -29,6 +29,7 @@ import tooltips
 # --- Local Application Imports ---
 from models import models           # Model definitions. Contains the functions and parameters for fitting models.
 from fit_logic import load_txtfile, perform_fit  # File parsing and fitting logic
+from ParamDialog import info_messagebox, error_messagebox, ask_integer  # Dialog for setting parameter bounds interactively
 
 # --- Matplotlib Configuration ---
 # Enable Latex in Matplotlib. Requires a LaTeX installation. Disable if not needed.
@@ -48,12 +49,40 @@ class FitApp(tk.Tk):
         font_size = 12
         default_font = tkfont.Font(family="Helvetica", size=font_size)
         style = ttk.Style(self)
-        style.configure("TButton", font=default_font)
-        style.configure("TLabel", font=default_font)
-        style.configure("TEntry", font=default_font)
-        style.configure("TCombobox", font=default_font)
-        style.configure("TFrame", font=default_font)
-        style.configure("TText", font=default_font)
+        # Set window background to white
+        self.configure(bg="white")
+        style.configure(".", background="white")  # Set ttk default background
+
+        # Try to use "Outfit" font if available, else fallback to Helvetica
+        try:
+            outfit_font = tkfont.Font(family="Outfit SemiBold", size=font_size)
+            self.out_fit_sec = tkfont.Font(family="Outfit Regular", size=font_size)
+            self.default_font = outfit_font
+        except tk.TclError:
+            self.default_font = tkfont.Font(family="Helvetica", size=font_size)
+            self.out_fit_sec = tkfont.Font(family="Helvetica", size=font_size)
+
+        style.configure("TButton", font=self.default_font)
+        style.configure("TLabel", font=self.default_font)
+        style.configure("TEntry", font=self.default_font)
+        style.configure("TCombobox", font=self.default_font)
+        style.configure("TFrame", font=self.default_font)
+        style.configure("TText", font=self.default_font)
+        style.configure("Option", font=self.out_fit_sec)
+
+        style.configure("TLabel", foreground="black", background="white", font=self.default_font)
+        # Remove border from Listbox and Scrollbar for a cleaner look
+        self.option_add("*Listbox.borderWidth", 0)
+        self.option_add("*Listbox.highlightThickness", 0)
+        self.option_add("*Scrollbar.borderWidth", 0)
+        self.option_add("*Scrollbar.highlightThickness", 0)
+
+        # Remove border from result_text (Text widget)
+        self.option_add("*Text.borderWidth", 0)
+        self.option_add("*Text.highlightThickness", 0)
+
+
+
 
         # --- Data storage ---
         self.x_all = None
@@ -82,20 +111,20 @@ class FitApp(tk.Tk):
         file_frame.pack(padx=10, pady=5, fill='x')
         ttk.Label(file_frame, text="Data file:").pack(side='left')
         self.file_var = tk.StringVar()
-        file_entry = ttk.Entry(file_frame, textvariable=self.file_var, width=60)
+        file_entry = ttk.Entry(file_frame, textvariable=self.file_var, width=60, font=self.out_fit_sec)
         file_entry.pack(side='left', padx=5)
         ttk.Button(file_frame, text="Browse...", command=self.browse_file).pack(side='left')
 
         # --- Area, thickness and temperature inputfields ---
         ttk.Label(file_frame, text="Area in um²:").pack(side='left', padx=(10, 5))
         self.new_area = tk.StringVar(value="625")
-        ttk.Entry(file_frame, textvariable=self.new_area, width=10).pack(side='left', padx=5)
+        ttk.Entry(file_frame, textvariable=self.new_area, width=5, font=self.out_fit_sec).pack(side='left', padx=5)
         ttk.Label(file_frame, text="Thickness in nm:").pack(side='left')
         self.new_thickness = tk.StringVar(value="10")
-        ttk.Entry(file_frame, textvariable=self.new_thickness, width=10).pack(side='left', padx=5)
+        ttk.Entry(file_frame, textvariable=self.new_thickness, width=5, font=self.out_fit_sec).pack(side='left', padx=5)
         ttk.Label(file_frame, text="Temperature in K:").pack(side='left')
         self.new_temperature = tk.StringVar(value="300")
-        ttk.Entry(file_frame, textvariable=self.new_temperature, width=10).pack(side='left', padx=5)
+        ttk.Entry(file_frame, textvariable=self.new_temperature, width=5, font=self.out_fit_sec).pack(side='left', padx=5)
 
         # Änderungen an Area/Thickness triggern Update
         self.new_area.trace_add("write", lambda *args: self.on_area_thickness_change())
@@ -108,6 +137,9 @@ class FitApp(tk.Tk):
         self.subset_var = tk.StringVar(value="All")
         subset_options = ["All", "Positive x", "Negative x", "Positive LRS", "Positive HRS", "Negative LRS", "Negative HRS"]
         subset_menu = ttk.OptionMenu(subset_frame, self.subset_var, subset_options[0], *subset_options, command=lambda _: self.apply_subset())
+        subset_menu["menu"].config(font=self.out_fit_sec)
+        style.configure("Custom.TMenubutton", font=self.out_fit_sec)
+        subset_menu.configure(style="Custom.TMenubutton")
         subset_menu.pack(side='left', padx=5)
 
         # --- Model selection and fit actions ---
@@ -119,6 +151,9 @@ class FitApp(tk.Tk):
         if model_names:
             self.model_var.set(model_names[0])
         model_menu = ttk.OptionMenu(action_frame, self.model_var, model_names[0] if model_names else "", *model_names, command= lambda _: self.update_latex_display())
+        model_menu["menu"].config(font=self.out_fit_sec)
+        style.configure("Custom.TMenubutton", font=self.out_fit_sec)
+        model_menu.configure(style="Custom.TMenubutton")
         model_menu.pack(side='left', padx=5)
 
         # Fit method selection
@@ -127,6 +162,9 @@ class FitApp(tk.Tk):
         method_options = ["leastsq", "least_squares", "ampgo", "nelder", "powell", "differential_evolution", "basinhopping"]
         self.fitmethod_var.set(method_options[0])
         fitmethod_menu = ttk.OptionMenu(action_frame, self.fitmethod_var, method_options[0], *method_options)
+        fitmethod_menu["menu"].config(font=self.out_fit_sec)
+        style.configure("Custom.TMenubutton", font=self.out_fit_sec)
+        fitmethod_menu.configure(style="Custom.TMenubutton")
         fitmethod_menu.pack(side='left', padx=5)
 
         fitButton = ttk.Button(action_frame, text="Fit Selection", command=self.fit_selection)
@@ -151,11 +189,11 @@ class FitApp(tk.Tk):
         # Input for manual range setting
         ttk.Label(range_frame, text="From:").pack(side='left', padx=(10,0))
         self.range_min_var = tk.StringVar()
-        ttk.Entry(range_frame, textvariable=self.range_min_var, width=10).pack(side='left')
+        ttk.Entry(range_frame, textvariable=self.range_min_var, width=10, font=self.out_fit_sec).pack(side='left')
 
         ttk.Label(range_frame, text="To:").pack(side='left', padx=(10,0))
         self.range_max_var = tk.StringVar()
-        ttk.Entry(range_frame, textvariable=self.range_max_var, width=10).pack(side='left')
+        ttk.Entry(range_frame, textvariable=self.range_max_var, width=10, font=self.out_fit_sec).pack(side='left')
 
         setRangeButton = ttk.Button(range_frame, text="Set Range", command=self.set_manual_range)
         setRangeButton.pack(side='left', padx=5)
@@ -170,11 +208,15 @@ class FitApp(tk.Tk):
         fit_list_frame = ttk.Frame(self)
         fit_list_frame.pack(padx=10, pady=5, fill='x', expand=False)
         ttk.Label(fit_list_frame, text="Fits:").pack(side='top', anchor='w')
-        self.fit_listbox = tk.Listbox(fit_list_frame, height=3)
+        self.fit_listbox = tk.Listbox(fit_list_frame, height=3, font=self.out_fit_sec, selectmode='single')
         self.fit_listbox.pack(side='left', fill='x', expand=True)
         scrollbar = ttk.Scrollbar(fit_list_frame, orient='vertical', command=self.fit_listbox.yview)
         scrollbar.pack(side='right', fill='y')
         self.fit_listbox.config(yscrollcommand=scrollbar.set)
+        
+        # --- Horizontal separator ---
+        separator = ttk.Separator(self, orient='horizontal')
+        separator.pack(fill='x', padx=10, pady=5)
         
         # --- Model LaTeX equation display ---
         self.latex_frame = ttk.Frame(self)
@@ -194,16 +236,21 @@ class FitApp(tk.Tk):
         sig = inspect.signature(SpanSelector)
         span_args = {'direction': 'horizontal', 'useblit': True}
         if 'rectprops' in sig.parameters:
-            span_args['rectprops'] = dict(alpha=0.3, facecolor='orange')
+            span_args['rectprops'] = dict(alpha=0.3, facecolor='blue')
         elif 'props' in sig.parameters:
-            span_args['props'] = dict(alpha=0.3, facecolor='orange')
+            span_args['props'] = dict(alpha=0.3, facecolor='blue')
 
         self.span_log = SpanSelector(self.ax_log, self.on_select, **span_args)
         self.span_lin = SpanSelector(self.ax_lin, self.on_select, **span_args)
-
+        
+        # --- Horizontal separator ---
+        separator = ttk.Separator(self, orient='horizontal')
+        separator.pack(fill='x', padx=10, pady=5)
         # --- Results text ---
-        self.result_text = tk.Text(self, height=16)
+        self.result_text = tk.Text(self, height=16, wrap='word', font=self.out_fit_sec)
         self.result_text.pack(padx=10, pady=5, fill='x')
+        self.result_text.bind("<Key>", lambda e: "break")  # Alle Tastatureingaben blockieren
+        self.result_text.config(cursor="arrow") # Cursor auf Pfeil setzen, um Eingabe zu verhindern
 
         # --- Tooltips ---
         tooltips.ToolTip(file_entry, "Select a data file to load.")
@@ -233,7 +280,8 @@ class FitApp(tk.Tk):
             self.temp_fit = None
             self.plot_data()
         except ValueError:
-            messagebox.showerror("Error", "Invalid manual range. Please enter valid numeric values.")
+            error_messagebox("Invalid Range", "Please enter valid numeric values for the range.", font=self.out_fit_sec)
+            return
 
     def browse_file(self):
         """Open a file dialog to select a data file for the fitting process."""
@@ -247,7 +295,7 @@ class FitApp(tk.Tk):
                 self.raw_y = np.array(y)
                 self.update_scaled_data()
             except Exception as e:
-                messagebox.showerror("Error", f"Failed to load data: {e}")
+                error_messagebox("File Error", f"Could not load file: {e}", font=self.out_fit_sec)
                 return
             # Reset fits and temp
             self.fits.clear()
@@ -335,7 +383,7 @@ class FitApp(tk.Tk):
                     start, end = end, start
                 mask = (indices >= start) & (indices <= end) & (self.x_all >= 0)
             else:
-                messagebox.showwarning("Warning", "Cannot determine positive peak/zero for LRS; showing positive data.")
+                error_messagebox("Warning", "Cannot determine positive peak/zero for LRS; showing positive data.", font=self.out_fit_sec)
                 mask = self.x_all >= 0
         elif subset == "Positive HRS":
             if self.pos_peak_index is not None and self.pos_return_index is not None:
@@ -345,7 +393,7 @@ class FitApp(tk.Tk):
                     start, end = end, start
                 mask = (indices > start) & (indices <= end) & (self.x_all >= 0)
             else:
-                messagebox.showwarning("Warning", "Cannot determine positive peak/return for HRS; showing positive data.")
+                error_messagebox("Warning", "Cannot determine positive peak/return for HRS; showing positive data.", font=self.out_fit_sec)
                 mask = self.x_all >= 0
         elif subset == "Negative LRS":
             if self.neg_peak_index is not None and self.zero_index is not None:
@@ -355,7 +403,7 @@ class FitApp(tk.Tk):
                     start, end = end, start
                 mask = (indices >= start) & (indices <= end) & (self.x_all <= 0)
             else:
-                messagebox.showwarning("Warning", "Cannot determine negative peak/zero for LRS; showing negative data.")
+                error_messagebox("Warning", "Cannot determine negative peak/zero for LRS; showing negative data.", font=self.out_fit_sec)
                 mask = self.x_all <= 0
         elif subset == "Negative HRS":
             if self.neg_peak_index is not None and self.neg_return_index is not None:
@@ -365,7 +413,7 @@ class FitApp(tk.Tk):
                     start, end = end, start
                 mask = (indices > start) & (indices <= end) & (self.x_all <= 0)
             else:
-                messagebox.showwarning("Warning", "Cannot determine negative peak/return for HRS; showing negative data.")
+                error_messagebox("Warning", "Cannot determine negative peak/return for HRS; showing negative data.", font=self.out_fit_sec)
                 mask = self.x_all <= 0
         else:
             mask = np.ones(n, dtype=bool)
@@ -463,37 +511,37 @@ class FitApp(tk.Tk):
     def fit_selection(self):
         """Perform a fit on the selected range of data using the selected model and method."""
         if self.current_x is None:
-            messagebox.showerror("Error", "No data loaded.")
+            error_messagebox("Error", "No data loaded. Please load a data file first.", font=self.out_fit_sec)
             return
         if not self.selected_range:
-            messagebox.showerror("Error", "No range selected.")
+            error_messagebox("Error", "No range selected.", font=self.out_fit_sec)
             return
         model_key = self.model_var.get()
         if model_key not in models:
-            messagebox.showerror("Error", "Invalid model selected.")
+            error_messagebox("Error", "Invalid model selected.", font=self.out_fit_sec)
             return
         x_min, x_max = self.selected_range
         mask = (self.current_x >= x_min) & (self.current_x <= x_max)
         xs = self.current_x[mask]
         ys = self.current_y[mask]
         if len(xs) < 2:
-            messagebox.showerror("Error", "Not enough data points in the selected range.")
+            error_messagebox("Error", "Not enough data points in the selected range.", font=self.out_fit_sec)
             return
         func = models[model_key]['func']
-        param_names = models[model_key].get('params', None)
-        p0 = np.ones(len(param_names)) if param_names else None
         method = self.fitmethod_var.get()
         # If lmfit selected but not available, warn and fallback
         fit_warnings = ""
         try:
             with warnings.catch_warnings(record=True) as wlist:
                 warnings.simplefilter("always")
-                fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get())
+                # Erzeuge eine kleinere Schriftart (2px kleiner als self.out_fit_sec)
+
+                fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
                 # Alle Warnungen sammeln
                 for w in wlist:
                     fit_warnings += f"Warning: {w.message}\n"
         except Exception as e:
-            messagebox.showerror("Fit Error", f"Fitting failed ({method}): {e}")
+            error_messagebox("Fit Error", f"Fitting failed ({method}): {e}", font=self.out_fit_sec)
             return
         
         state = "N/A"
@@ -529,12 +577,12 @@ class FitApp(tk.Tk):
 
     def add_fit(self):
         if not self.temp_fit:
-            messagebox.showerror("Error", "No temporary fit to add. Perform a fit first.")
+            error_messagebox("Error", "No temporary fit to add. Perform a fit first.", font=self.out_fit_sec)
             return
         self.fits.append(self.temp_fit.copy())
         self.temp_fit = None
         self.result_text.delete('1.0', tk.END)
-        messagebox.showinfo("Added", "Fit added to plot.")
+        info_messagebox("Success", "Fit added to plot.", font=self.out_fit_sec, width=350, height=100)
         self.update_fit_list()
         self.plot_data()
 
@@ -590,11 +638,11 @@ class FitApp(tk.Tk):
         If only one state is available, interpolate only that state. If one state is already interpolated, allow the other to be interpolated later.
         """
         if len(self.fits) < 2:
-            messagebox.showwarning("Interpolation", "At least two fits are required for interpolation.")
+            error_messagebox("Error", "At least two fits are required for interpolation.", font=self.out_fit_sec)
             return
 
         # Ask for polynomial degree
-        k = simpledialog.askinteger("Polynomial Degree", "What degree should the interpolation polynomial have? (2-5)", minvalue=1, maxvalue=5)
+        k = ask_integer("Polynomial Degree", "What degree should the interpolation polynomial have?", font=self.out_fit_sec)
         if not k:
             return
 
