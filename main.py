@@ -548,9 +548,9 @@ class FitApp(tk.Tk):
             return
         
         state = "N/A"
-        if self.subset_var.get().endswith("LRS"):
+        if self.subset_var.get().endswith("Forward"):
             state = "low"
-        elif self.subset_var.get().endswith("HRS"):
+        elif self.subset_var.get().endswith("Reverse"):
             state = "high"
 
            
