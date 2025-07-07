@@ -130,7 +130,7 @@ class FitApp(tk.Tk):
         subset_frame.pack(padx=10, pady=5, fill='x')
         ttk.Label(subset_frame, text="Subset:").pack(side='left')
         self.subset_var = tk.StringVar(value="All")
-        subset_options = ["All", "Positive x", "Negative x", "Positive LRS", "Positive HRS", "Negative LRS", "Negative HRS"]
+        subset_options = ["All", "Positive", "Negative","Positive Forward", "Positive Reverse", "Negative Forward", "Negative Reverse"]
         subset_menu = ttk.OptionMenu(subset_frame, self.subset_var, subset_options[0], *subset_options, command=lambda _: self.apply_subset())
         subset_menu["menu"].config(font=self.out_fit_sec)
         style.configure("Custom.TMenubutton", font=self.out_fit_sec)
@@ -355,12 +355,12 @@ class FitApp(tk.Tk):
         """
         Apply the selected subset to the data and update the plot. Subset options:
         - All: Show all data
-        - Positive x: Show data where x >= 0
-        - Negative x: Show data where x <= 0
-        - Positive LRS: Show data in the range of positive peak to zero
-        - Positive HRS: Show data in the range of positive peak to positive return
-        - Negative LRS: Show data in the range of negative peak to zero
-        - Negative HRS: Show data in the range of negative peak to negative return
+        - Positive: Show data where x >= 0
+        - Negative: Show data where x <= 0
+        - Positive Forward: Data from zero to positive peak (increasing x >= 0)
+        - Positive Reverse: Data from positive peak to positive return (decreasing x >= 0)
+        - Negative Forward: Data from zero to negative peak (decreasing x <= 0)
+        - Negative Reverse: Data from negative peak to negative return (increasing x <= 0)
         """
         if self.x_all is None:
             return
@@ -369,21 +369,21 @@ class FitApp(tk.Tk):
         indices = np.arange(n)
         if subset == "All":
             mask = np.ones(n, dtype=bool)
-        elif subset == "Positive x":
+        elif subset == "Positive":
             mask = self.x_all >= 0
-        elif subset == "Negative x":
+        elif subset == "Negative":
             mask = self.x_all <= 0
-        elif subset == "Positive LRS":
-            if self.pos_peak_index is not None and self.zero_index is not None:
+        elif subset == "Positive Forward":
+            if self.zero_index is not None and self.pos_peak_index is not None:
                 start = self.zero_index
                 end = self.pos_peak_index
                 if start > end:
                     start, end = end, start
                 mask = (indices >= start) & (indices <= end) & (self.x_all >= 0)
             else:
-                error_messagebox("Warning", "Cannot determine positive peak/zero for LRS; showing positive data.", font=self.out_fit_sec)
+                error_messagebox("Warning", "Cannot determine zero/positive peak for Positive Forward; showing positive data.", font=self.out_fit_sec)
                 mask = self.x_all >= 0
-        elif subset == "Positive HRS":
+        elif subset == "Positive Reverse":
             if self.pos_peak_index is not None and self.pos_return_index is not None:
                 start = self.pos_peak_index
                 end = self.pos_return_index
@@ -391,19 +391,19 @@ class FitApp(tk.Tk):
                     start, end = end, start
                 mask = (indices > start) & (indices <= end) & (self.x_all >= 0)
             else:
-                error_messagebox("Warning", "Cannot determine positive peak/return for HRS; showing positive data.", font=self.out_fit_sec)
+                error_messagebox("Warning", "Cannot determine positive peak/return for Positive Reverse; showing positive data.", font=self.out_fit_sec)
                 mask = self.x_all >= 0
-        elif subset == "Negative LRS":
-            if self.neg_peak_index is not None and self.zero_index is not None:
+        elif subset == "Negative Forward":
+            if self.zero_index is not None and self.neg_peak_index is not None:
                 start = self.zero_index
                 end = self.neg_peak_index
                 if start > end:
                     start, end = end, start
                 mask = (indices >= start) & (indices <= end) & (self.x_all <= 0)
             else:
-                error_messagebox("Warning", "Cannot determine negative peak/zero for LRS; showing negative data.", font=self.out_fit_sec)
+                error_messagebox("Warning", "Cannot determine zero/negative peak for Negative Forward; showing negative data.", font=self.out_fit_sec)
                 mask = self.x_all <= 0
-        elif subset == "Negative HRS":
+        elif subset == "Negative Reverse":
             if self.neg_peak_index is not None and self.neg_return_index is not None:
                 start = self.neg_peak_index
                 end = self.neg_return_index
@@ -411,7 +411,7 @@ class FitApp(tk.Tk):
                     start, end = end, start
                 mask = (indices > start) & (indices <= end) & (self.x_all <= 0)
             else:
-                error_messagebox("Warning", "Cannot determine negative peak/return for HRS; showing negative data.", font=self.out_fit_sec)
+                error_messagebox("Warning", "Cannot determine negative peak/return for Negative Reverse; showing negative data.", font=self.out_fit_sec)
                 mask = self.x_all <= 0
         else:
             mask = np.ones(n, dtype=bool)
@@ -439,9 +439,9 @@ class FitApp(tk.Tk):
         fits_to_plot = self.fits + ([self.temp_fit] if self.temp_fit else [])
 
         # Filter fits je nach Subset
-        if subset.endswith("HRS"):
+        if subset.endswith("Reverse"):
             fits_to_plot = [fit for fit in fits_to_plot if fit.get('state') == 'high']
-        elif subset.endswith("LRS"):
+        elif subset.endswith("Forward"):
             fits_to_plot = [fit for fit in fits_to_plot if fit.get('state') == 'low']
         # sonst: alle wie gehabt
 
@@ -484,9 +484,14 @@ class FitApp(tk.Tk):
 
         # Achsenbeschriftungen und Legende in LaTeX, falls aktiviert
         use_latex = plt.rcParams.get("text.usetex", False)
-        for ax, ylabel in zip([self.ax_log, self.ax_lin], [r'$|J|\,\mathrm{in}\,\mathrm{A/m^2}$', r'$I\,\mathrm{in}\,\mathrm{A/m^2}$']):
-            ax.set_xlabel(r'$E\,\mathrm{in}\,\mathrm{V/m}$' if use_latex else 'E in V/m', fontsize=15)
-            ax.set_ylabel(ylabel if use_latex else ylabel.replace('$', ''), fontsize=15)
+        # Raw-TeX (kein \mathrm), Nicht-Latex-Variante als Klartext
+        ylabels_latex = [r'$|J|~[A/m^2]$', r'$J~[A/m^2]$']
+        ylabels_plain = ['|J| [A/m^2]', 'J [A/m^2]']
+        xlabels_latex = r'$E~[V/m]$'
+        xlabel_plain = 'E [V/m]'
+        for ax, ylabel_latex, ylabel_plain in zip([self.ax_log, self.ax_lin], ylabels_latex, ylabels_plain):
+            ax.set_xlabel(xlabels_latex if use_latex else xlabel_plain, fontsize=15)
+            ax.set_ylabel(ylabel_latex if use_latex else ylabel_plain, fontsize=15)
             ax.tick_params(axis='both', labelsize=14)
             ax.legend(loc='best', fontsize=13)
             ax.grid(True)
@@ -532,12 +537,10 @@ class FitApp(tk.Tk):
         try:
             with warnings.catch_warnings(record=True) as wlist:
                 warnings.simplefilter("always")
-                # Erzeuge eine kleinere Schriftart (2px kleiner als self.out_fit_sec)
-
+                # Perform the fit using the selected method
                 fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
                 if fit_result is None:
                     return
-                # Alle Warnungen sammeln
                 for w in wlist:
                     fit_warnings += f"Warning: {w.message}\n"
         except Exception as e:
