@@ -4,6 +4,7 @@ import inspect                     # For introspection (e.g. argument inspection
 import warnings                    # To control or suppress warnings
 import datetime                    # For handling timestamps and time formatting
 import sys                         # System-specific parameters and functions
+import os                          # For file path operations
 
 # --- Third-Party Imports ---
 import numpy as np                 # Numerical computing
@@ -58,12 +59,12 @@ class FitApp(tk.Tk):
             self.default_font = tkfont.Font(family="Helvetica", size=font_size, weight="bold")
             self.out_fit_sec = tkfont.Font(family="Helvetica", size=font_size)
 
-        style.configure("TButton", font=self.default_font)
+        style.configure("TButton", font=self.default_font, padding=4)
         style.configure("TLabel", font=self.default_font)
-        style.configure("TEntry", font=self.default_font)
-        style.configure("TCombobox", font=self.default_font)
-        style.configure("TFrame", font=self.default_font)
-        style.configure("TText", font=self.default_font)
+        style.configure("TEntry", font=self.default_font, padding=4)
+        style.configure("TCombobox", font=self.default_font, padding=4)
+        style.configure("TFrame", font=self.default_font, padding=4)
+        style.configure("TText", font=self.default_font, padding=4)
         style.configure("Option", font=self.out_fit_sec)
 
         style.configure("TLabel", foreground="black", background="white", font=self.default_font)
@@ -100,6 +101,10 @@ class FitApp(tk.Tk):
         # LaTeX rendering temporary variable
         self.latex_label = None
 
+        # Initialize icons
+        self.icons = {}
+        self.load_icons()
+
         # Plot scale variables
         self.left_scale_var = tk.StringVar(value="log")
         self.right_scale_var = tk.StringVar(value="log")
@@ -111,7 +116,8 @@ class FitApp(tk.Tk):
         self.file_var = tk.StringVar()
         file_entry = ttk.Entry(file_frame, textvariable=self.file_var, width=60, font=self.out_fit_sec)
         file_entry.pack(side='left', padx=5)
-        ttk.Button(file_frame, text="Browse...", command=self.browse_file).pack(side='left')
+        ttk.Button(file_frame, text="Browse...", command=self.browse_file,
+                  image=self.icons.get('browse'), compound='left').pack(side='left')
 
         # --- Area, thickness and temperature inputfields ---
         ttk.Label(file_frame, text="Area in um²:").pack(side='left', padx=(10, 5))
@@ -165,19 +171,24 @@ class FitApp(tk.Tk):
         fitmethod_menu.configure(style="Custom.TMenubutton")
         fitmethod_menu.pack(side='left', padx=5)
 
-        fitButton = ttk.Button(action_frame, text="Fit Selection", command=self.fit_selection)
+        fitButton = ttk.Button(action_frame, text="Fit Selection", command=self.fit_selection, 
+                              image=self.icons.get('fit'), compound='left')
         fitButton.pack(side='left', padx=5)
 
-        addFitButton = ttk.Button(action_frame, text="Add Fit", command=self.add_fit)
+        addFitButton = ttk.Button(action_frame, text="Add Fit", command=self.add_fit,
+                                 image=self.icons.get('add'), compound='left')
         addFitButton.pack(side='left', padx=5)
         
-        removeFitButton = ttk.Button(action_frame, text="Remove Fit", command=self.remove_fit)
+        removeFitButton = ttk.Button(action_frame, text="Remove Fit", command=self.remove_fit,
+                                   image=self.icons.get('remove'), compound='left')
         removeFitButton.pack(side='left', padx=5)
-        
-        saveFitButton = ttk.Button(action_frame, text="Save Fits", command=self.save_fits)
-        saveFitButton.pack(side='left', padx=5)
 
-        extrapolateButton = ttk.Button(action_frame, text="Extrapolate Fit", command=self.extrapolate_fit)
+        exportDataButton = ttk.Button(action_frame, text="Export Fitdata", command=self.export_fit_data,
+                                    image=self.icons.get('export'), compound='left')
+        exportDataButton.pack(side='left', padx=5)
+
+        extrapolateButton = ttk.Button(action_frame, text="Extrapolate Fit", command=self.extrapolate_fit,
+                                     image=self.icons.get('extrapolate'), compound='left')
         extrapolateButton.pack(side='left', padx=5)
 
         # --- Selected range display ---
@@ -196,10 +207,12 @@ class FitApp(tk.Tk):
         self.range_max_var = tk.StringVar()
         ttk.Entry(range_frame, textvariable=self.range_max_var, width=10, font=self.out_fit_sec).pack(side='left')
 
-        setRangeButton = ttk.Button(range_frame, text="Set Range", command=self.set_manual_range)
+        setRangeButton = ttk.Button(range_frame, text="Set Range", command=self.set_manual_range,
+                                  image=self.icons.get('range'), compound='left')
         setRangeButton.pack(side='left', padx=5)
 
-        delTempFitButton = ttk.Button(range_frame, text="Delete Temp. Fit", command=self.apply_subset)
+        delTempFitButton = ttk.Button(range_frame, text="Delete Temp. Fit", command=self.apply_subset,
+                                    image=self.icons.get('delete'), compound='left')
         delTempFitButton.pack(side='left', padx=5)
         
 
@@ -676,7 +689,7 @@ class FitApp(tk.Tk):
         self.fits.append(self.temp_fit.copy())
         self.temp_fit = None
         self.result_text.delete('1.0', tk.END)
-        info_messagebox("Success", "Fit added to plot.", font=self.out_fit_sec, width=350, height=100)
+        info_messagebox("Success", "Fit added to plot.", font=self.out_fit_sec, width=350, height=120)
         self.update_fit_list()
         self.plot_data()
 
@@ -703,28 +716,6 @@ class FitApp(tk.Tk):
             method = fit.get('method', '')
             desc = f"{idx+1}: {fit['model']} ({method}) [{x_min:.3g}, {x_max:.3g}]"
             self.fit_listbox.insert(tk.END, desc)
-
-    def save_fits(self):
-        """Save the current fits to a text file with metadata."""
-        if not self.fits:
-            error_messagebox("Error", "No fits to save.")
-            return
-        save_path = filedialog.asksaveasfilename(defaultextension='.txt', filetypes=[('Text files','*.txt'), ('All files','*.*')])
-        if not save_path:
-            return
-        try:
-            with open(save_path, 'w') as f:
-                f.write(f"# Fits saved on {datetime.datetime.now().isoformat()}\n")
-                for idx, fit in enumerate(self.fits, start=1):
-                    model_key = fit['model']
-                    method = fit.get('method', 'curve_fit')
-                    x_min, x_max = fit['range']
-                    f.write(f"Fit {idx}: Model: {model_key}, Method: {method}, Range: [{x_min:.5g}, {x_max:.5g}]\n")
-                    f.write(f"{fit['resultmessage']}\n")
-                    f.write("\n")
-            info_messagebox("Saved", f"Fits saved to {save_path}")
-        except Exception as e:
-            error_messagebox("Save Error", f"Failed to save fits: {e}")
 
     def display_fit_result(self, fit_result):
         
@@ -886,10 +877,184 @@ class FitApp(tk.Tk):
         self.latex_label = label
         self.latex_label.pack(side='left', padx=5)
 
+    def export_fit_data(self):
+        """Export the fit data to a text file with calculated I and U values."""
+        if not self.fits:
+            error_messagebox("Error", "No fits available for export.", font=self.out_fit_sec)
+            return
+    
+        save_path = filedialog.asksaveasfilename(
+            defaultextension='.txt',
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        if not save_path:
+            return
+    
+        try:
+            area_um2 = float(self.new_area.get())
+            thickness_nm = float(self.new_thickness.get())
+            area_m2 = area_um2 * 1e-12
+            thickness_m = thickness_nm * 1e-9
+    
+            with open(save_path, 'w') as f:
+                f.write(f"# Exported IV-Fit data on {datetime.datetime.now().isoformat()}\n")
+                for idx, fit in enumerate(self.fits, start=1):
+                    model = fit.get('model', 'unknown')
+                    method = fit.get('method', 'unknown')
+                    state = fit.get('state', 'N/A')
+                    label = fit.get('label', f'Fit {idx}')
+                    popt = fit.get('popt', {})
+                    xs = np.array(fit.get('fit_xs', []))
+                    ys = np.array(fit.get('fit_ys', []))
+                    if xs.size != ys.size:
+                        continue
+    
+                    # Kopfzeile für diesen Fit
+                    f.write(f"\nFit {idx}: {model}, Method: {method}, Subset: {state}\n")
+                    
+                    # Fitparameter mit Einheiten exportieren
+                    f.write("# Fit Parameters:\n")
+                    model_def = models.get(model, {})
+                    units_map = {}
+                    
+                    # Extract units from parameter definitions
+                    if isinstance(model_def.get('params'), dict):
+                        for param_name, param_config in model_def['params'].items():
+                            if isinstance(param_config, dict) and 'unit' in param_config:
+                                units_map[str(param_name)] = str(param_config['unit'])
+                    units_map['T'] = 'K'  # Temperature unit
+                    
+                    for param_name, param_obj in popt.items():
+                        unit = units_map.get(param_name, '')
+                        unit_str = f" ({unit})" if unit else ""
+                        value = param_obj.value if hasattr(param_obj, 'value') else param_obj
+                        stderr = param_obj.stderr if hasattr(param_obj, 'stderr') and param_obj.stderr is not None else 'N/A'
+                        f.write(f"# {param_name}{unit_str}: {value:.6e} ± {stderr}\n")
+                    
+                    f.write("E (V/m)\tJ (A/m²)\tV (V)\tI (A)\n")
+    
+                    # Datenzeilen (ohne Leerzeilen)
+                    for E, J in zip(xs, ys):
+                        V = E * thickness_m
+                        I = J * area_m2
+                        f.write(f"{E:.6e}\t{J:.6e}\t{V:.6e}\t{I:.6e}\n")
+
+            info_messagebox("Export successful", f"Data saved to:\n{save_path}", font=self.out_fit_sec)
+
+        except Exception as e:
+            error_messagebox("Error during export", f"Error:\n{str(e)}", font=self.out_fit_sec)
     def on_closing(self):
         self.destroy()
         sys.exit()
         
+    def load_icons(self):
+        """Load icons for buttons. Automatically loads all PNG files from icons folder."""
+        icon_size = 16
+        
+        # Icon mapping: button name -> possible icon filenames (without extension)
+        icon_mapping = {
+            'fit': ['paint-brush'],
+            'add': ['add', 'plus', 'create', 'new'],
+            'remove': ['remove', 'delete', 'minus', 'trash', 'cross'],
+            'export': ['upload'],
+            'extrapolate': ['code-compare'],
+            'browse': ['folder-upload'],
+            'range': ['arrows-h'],
+            'delete': ['time-quarter-to']
+        }
+        
+        # Fallback colors and symbols if no icon found
+        fallback_configs = {
+            'fit': {'color': '#4CAF50', 'symbol': '⚡'},
+            'add': {'color': '#2196F3', 'symbol': '+'},
+            'remove': {'color': '#F44336', 'symbol': '−'},
+            'export': {'color': '#FF9800', 'symbol': '💾'},
+            'extrapolate': {'color': '#9C27B0', 'symbol': '↗'},
+            'browse': {'color': '#795548', 'symbol': '📁'},
+            'range': {'color': '#607D8B', 'symbol': '📏'},
+            'delete': {'color': '#E91E63', 'symbol': '🗑'}
+        }
+        
+        # Get all PNG files in icons directory
+        icons_dir = os.path.join(os.path.dirname(__file__), 'icons')
+        available_icons = {}
+        
+        if os.path.exists(icons_dir):
+            for filename in os.listdir(icons_dir):
+                if filename.lower().endswith('.png'):
+                    icon_name = os.path.splitext(filename)[0].lower()
+                    available_icons[icon_name] = os.path.join(icons_dir, filename)
+        
+        # Load icons for each button
+        for button_name, possible_names in icon_mapping.items():
+            icon_loaded = False
+            
+            # Try to find matching icon
+            for possible_name in possible_names:
+                if possible_name.lower() in available_icons:
+                    try:
+                        image = Image.open(available_icons[possible_name.lower()])
+                        image = image.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+                        self.icons[button_name] = ImageTk.PhotoImage(image)
+                        icon_loaded = True
+                        print(f"Loaded icon for {button_name}: {possible_name}.png")
+                        break
+                    except Exception as e:
+                        print(f"Failed to load {possible_name}.png for {button_name}: {e}")
+                        continue
+            
+            # If no icon found, create fallback
+            if not icon_loaded:
+                fallback = fallback_configs.get(button_name, {'color': '#808080', 'symbol': '?'})
+                self.icons[button_name] = self.create_simple_icon(
+                    icon_size, fallback['color'], fallback['symbol']
+                )
+                print(f"Created fallback icon for {button_name}")
+
+    def create_simple_icon(self, size, color, symbol):
+        """Create a simple colored icon with a symbol."""
+        try:
+            # Create colored background
+            img = Image.new('RGBA', (size, size), (255, 255, 255, 0))
+            
+            # Convert hex color to RGB
+            color_rgb = tuple(int(color[i:i+2], 16) for i in (1, 3, 5))
+            
+            # Create a simple colored circle or square
+            from PIL import ImageDraw, ImageFont
+            draw = ImageDraw.Draw(img)
+            
+            # Draw colored circle
+            margin = 2
+            draw.ellipse([margin, margin, size-margin, size-margin], 
+                        fill=color_rgb + (200,), outline=color_rgb + (255,))
+            
+            # Try to add symbol (fallback if font issues)
+            try:
+                # Try to get a reasonable font size
+                font_size = max(8, size // 2)
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except:
+                try:
+                    font = ImageFont.load_default()
+                except:
+                    font = None
+            
+            if font and len(symbol) == 1:
+                # Get text size and center it
+                bbox = draw.textbbox((0, 0), symbol, font=font)
+                text_width = bbox[2] - bbox[0]
+                text_height = bbox[3] - bbox[1]
+                x = (size - text_width) // 2
+                y = (size - text_height) // 2
+                draw.text((x, y), symbol, fill='white', font=font)
+            
+            return ImageTk.PhotoImage(img)
+        except Exception:
+            # Ultimate fallback: empty PhotoImage
+            fallback_img = Image.new('RGBA', (size, size), (128, 128, 128, 100))
+            return ImageTk.PhotoImage(fallback_img)
+
 # Start up
 if __name__ == "__main__":
     app = FitApp()

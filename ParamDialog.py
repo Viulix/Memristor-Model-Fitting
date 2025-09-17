@@ -115,7 +115,7 @@ def info_messagebox(title, message, font=("Helvetica", 12), width=None, height=N
         # Labelgröße berechnen
         label.update_idletasks()
         req_width = label.winfo_reqwidth() + 40  # Padding berücksichtigen
-        req_height = label.winfo_reqheight() + 80  # Padding + Button
+        req_height = label.winfo_reqheight() + 85  # Padding + Button
         width = req_width if width is None else width
         height = req_height if height is None else height
 
@@ -153,7 +153,7 @@ def error_messagebox(title, message, font=("Helvetica", 12), width=None, height=
         # Labelgröße berechnen
         label.update_idletasks()
         req_width = label.winfo_reqwidth() + 40  # Padding berücksichtigen
-        req_height = label.winfo_reqheight() + 80  # Padding + Button
+        req_height = label.winfo_reqheight() + 85  # Padding + Button
         width = req_width if width is None else width
         height = req_height if height is None else height
 
