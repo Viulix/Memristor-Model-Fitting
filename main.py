@@ -15,6 +15,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # Embedding Mat
 
 # --- GUI: Tkinter Modules ---
 import tkinter as tk
+import re
 from tkinter import (
     filedialog,     # File dialogs (open/save)
     ttk       # Themed widgets
@@ -745,7 +746,40 @@ class FitApp(tk.Tk):
         header_lines = []
         variable_lines = []
         writing_variables = False
+        # Füge im [Variables]-Abschnitt die Einheiten aus models hinzu
+        try:
+            model_key = self.model_var.get()
+            model_def = models.get(model_key, {}) if isinstance(models, dict) else {}
+            units_map = {}
 
+            # Extract units from parameter definitions
+            if isinstance(model_def.get('params'), dict):
+                for param_name, param_config in model_def['params'].items():
+                    if isinstance(param_config, dict) and 'unit' in param_config:
+                        units_map[str(param_name)] = str(param_config['unit'])
+                        # Add temperature unit which is common to all models
+                        units_map['T'] = 'K'
+
+            if units_map:
+                new_lines = []
+                in_vars = False
+                for line in lines:
+                    stripped = line.strip()
+                    if stripped.startswith('[Variables]'):
+                        in_vars = True
+                        new_lines.append(line)
+                        continue
+                    if in_vars:
+                        m = re.match(r'^(\s*)([A-Za-z0-9_]+)\s*:(.*)$', line)
+                        if m:
+                            indent, name, rest = m.groups()
+                            unit = units_map.get(name)
+                            if unit and f'({unit})' not in line:
+                                line = f"{indent}{name} ({unit}):{rest}"
+                    new_lines.append(line)
+                lines = new_lines
+        except Exception:
+            pass
         for line in lines:
             if line.strip().startswith('[Variables]'):
                 writing_variables = True

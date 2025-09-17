@@ -100,100 +100,101 @@ models = {
     'Schottky emission': {
         'func': J_schottky,
         'params': {
-            'A':   {'init': 1,   'min': -np.inf,   'max': np.inf},
-            'phi_B':    {'init': 1,   'min': 0,         'max': np.inf},
-            'epsilon_r':{'init': 1,   'min': 1e-12,     'max': np.inf},
+            'A':         {'init': 1e6,   'min': 1e4,   'max': 1e9,   'unit': 'A m^-2 K^-2'},
+            'phi_B':     {'init': 0.6,   'min': 0.3,   'max': 1.1,   'unit': 'eV'},
+            'epsilon_r': {'init': 6,     'min': 4,     'max': 8,     'unit': '1'},
         },
-        'latex': r"$J_{\mathrm{SE}} = \frac{4\pi q m^*(kT)^2}{h^3} \exp\left( \frac{-q\left( \Phi_B - \sqrt{\frac{qE}{4\pi \varepsilon}} \right)}{kT} \right)$"
+        'latex': r"$J_{\mathrm{SE}} = A^* T^2 \exp\left("r"-\frac{q \left( \phi_B - \sqrt{ \frac{qE}{4\pi \varepsilon_r \varepsilon_0} } \right)}{k_B T}"    r"\right)$"
+        #'latex': r"$J_{\mathrm{SE}} = \frac{4\pi q m^*(kT)^2}{h^3} \exp\left( \frac{-q\left( \Phi_B - \sqrt{\frac{qE}{4\pi \varepsilon}} \right)}{kT} \right)$"
+    },
+    'Poole–Frenkel': {
+        'func': J_poole_frenkel,
+        'params': {
+            'mu':        {'init': 1e-10,   'min': 1e-14,    'max': 1e-6,  'unit': 'm^2/(V s)'},
+            'N_C':       {'init': 1e25,    'min': 1e23,     'max': 1e27,  'unit': 'm^-3'},
+            'phi_T':     {'init': 0.5,     'min': 0.3,      'max': 1.2,   'unit': 'eV'},
+            'epsilon_r': {'init': 5,       'min': 4,        'max': 8,     'unit': '1'},
+        },
+        'latex': r"$J_{\mathrm{PFE}} = q \mu N_C E \exp\left[ \frac{-q\left( \Phi_T - \sqrt{\frac{qE}{\pi \varepsilon}} \right)}{kT} \right]$"
     },
     'Fowler–Nordheim': {
         'func': J_fowler_nordheim,
         'params': {
-            'K_1':   {'init': 1,  'min': -np.inf,  'max': np.inf},
-            'K_2':   {'init': 1,  'min': -np.inf,  'max': np.inf},
+            'K_1':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'A J V^-2'},
+            'K_2':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'V m^-1 J^-3/2'},
         },
         'latex': r"$J_{\mathrm{FN}} = \frac{q^2}{8\pi h \Phi_B} E^2 \exp\left( \frac{-8\pi \sqrt{2qm^*} \, \Phi_B^{3/2}}{3hE} \right)$"
     },
     'Direct tunneling': {
         'func': J_direct_tunneling,
         'params': {
-            'm_eff': {'init': 1,   'min': 0,        'max': np.inf},
-            'phi_B': {'init': 1,   'min': 0,        'max': np.inf},
-            'kappa': {'init': 1,   'min': 0,        'max': np.inf},
-            't_ox':  {'init': 1,   'min': 0,        'max': np.inf},
+            'm_eff': {'init': 1,   'min': 0.1,        'max': 2,     'unit': '1'},       # relative to m_e
+            'phi_B': {'init': 1,   'min': 0.2,        'max': 3,     'unit': 'eV'},
+            'kappa': {'init': 1,   'min': 0.1,        'max': 10,    'unit': '1'},
+            't_ox':  {'init': 1,   'min': 0.1,        'max': 100,   'unit': 'm'},
         },
         'latex': r"$J_{\mathrm{DT}} \approx \exp\left\{ \frac{-8\pi \sqrt{2q}}{3h} (m^* \Phi_B)^{1/2} \kappa \cdot t_{\mathrm{ox,eq}} \right\}$"
     },
     'Ohmic conduction': {
         'func': J_ohmic,
         'params': {
-            'mu':   {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'N_C':  {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'E_C':  {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'E_F':  {'init': 1,   'min': -np.inf,  'max': np.inf},
+            'mu':   {'init': 1,      'min': 1e-10,  'max': 1e-3,  'unit': 'm^2/(V s)'},
+            'N_C':  {'init': 1,      'min': 1e22,   'max': 1e27,  'unit': 'm^-3'},
+            'E_C':  {'init': 1,      'min': 0,      'max': 2,     'unit': 'J'},
+            'E_F':  {'init': 1,      'min': 0,      'max': 2,     'unit': 'J'},
         },
         'latex': r"$J_{\mathrm{ohmic}} = q \mu N_C E \exp\left[ \frac{-(E_C - E_F)}{kT} \right]$"
-    },
-    'Poole–Frenkel': {
-        'func': J_poole_frenkel,
-        'params': {
-            'mu':        {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'N_C':       {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'phi_T':     {'init': 1,   'min': 0,        'max': np.inf},
-            'epsilon_r': {'init': 1,   'min': 0,        'max': np.inf},
-        },
-        'latex': r"$J_{\mathrm{PFE}} = q \mu N_C E \exp\left[ \frac{-q\left( \Phi_T - \sqrt{\frac{qE}{\pi \varepsilon}} \right)}{kT} \right]$"
     },
     'SCLC': {
         'func': J_space_charge_limited,
         'params': {
-            'mu':        {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'epsilon_r': {'init': 1,   'min': 0,        'max': np.inf},
-            'theta':     {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'd':         {'init': 1,   'min': 1e-15,    'max': np.inf},
+            'mu':        {'init': 1e-6,   'min': 1e-10,  'max': 1e-4,  'unit': 'm^2/(V s)'},
+            'epsilon_r': {'init': 6,      'min': 2,      'max': 25,    'unit': '1'},
+            'theta':     {'init': 1,      'min': 1e-3,   'max': 1e2,   'unit': '1'},
+            'd':         {'init': 10e-9,  'min': 1e-15,  'max': 1e-7,  'unit': 'm'},
         },
         'latex': r"$J_{\mathrm{SCLC}} = \frac{9}{8} \varepsilon_i \mu \theta \frac{V^2}{d^3}$"
     },
     'Ionic conduction': {
         'func': J_ionic,
         'params': {
-            'sigma_0': {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'dG':      {'init': 1,   'min': 0,        'max': np.inf},
+            'sigma_0': {'init': 1e-4,   'min': 1e-12,  'max': 1e-2,  'unit': 'S m^-1 K'},
+            'dG':      {'init': 0.5,    'min': 0,      'max': 1.5,   'unit': 'J'},
         },
         'latex': r"$J_{\mathrm{ionic}} \propto \frac{E}{T} \exp\left( \frac{-\Delta G^{\neq}}{kT} \right)$"
     },
     'Nearest-neighbor hopping': {
         'func': J_nearest_neighbor_hopping,
         'params': {
-            'sigma_0': {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'T0':      {'init': 1,   'min': -np.inf,  'max': np.inf},
+            'sigma_0': {'init': 1e-4,   'min': 1e-10,  'max': 1e-2,  'unit': 'S/m'},
+            'T0':      {'init': 1e3,    'min': 1e2,    'max': 1e6,   'unit': 'K'},
         },
         'latex': r"$J_{\mathrm{NNH}} = \sigma_0 \exp\left( \frac{-T_0}{T} \right) \cdot E$"
     },
     'Variable-range hopping': {
         'func': J_variable_range_hopping,
         'params': {
-            'sigma_0': {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'T0':      {'init': 1,   'min': 0,        'max': np.inf},
+            'sigma_0': {'init': 1e-4,   'min': 1e-10,  'max': 1e-2,  'unit': 'S/m'},
+            'T0':      {'init': 1e3,    'min': 1e2,    'max': 1e6,   'unit': 'K'},
         },
         'latex': r"$J_{\mathrm{VRH}} = \sigma_0 \exp \left( \frac{-T_0}{T} \right)^{1/4} \cdot E$"
     },
     'Trap-assisted tunneling': {
         'func': J_trap_assisted_tunneling,
         'params': {
-            'A':     {'init': 1,   'min': -np.inf,  'max': np.inf},
-            'm_eff':  {'init': 1,   'min': 0,        'max': np.inf},
-            'phi_T':  {'init': 1,   'min': 0,        'max': np.inf},
+            'A':      {'init': 1,    'min': 1e-6,  'max': 1e5,  'unit': 'A m^-2'},
+            'm_eff':  {'init': 1,    'min': 0.1,   'max': 2,    'unit': '1'},       # relative to m_e
+            'phi_T':  {'init': 1,    'min': 0.1,   'max': 2.5,  'unit': 'eV'},
         },
         'latex': r"$J_{\mathrm{TAT}} = A \exp\left( \frac{-8\pi\sqrt{2qm^*} \, \Phi_T^{3/2}}{3hE} \right)$"
     },
     'Linear test': {
         'func': linear_test,
         'params': {
-            'm': {'init': 1, 'min': -np.inf, 'max': np.inf},
-            'b': {'init': 1, 'min': -np.inf, 'max': np.inf},
+            'm': {'init': 1, 'min': -np.inf, 'max': np.inf, 'unit': '1'},
+            'b': {'init': 1, 'min': -np.inf, 'max': np.inf, 'unit': '1'},
         },
         'latex': r"$J = mx + b$"
-    }
+    },
 }
 
