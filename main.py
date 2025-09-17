@@ -13,8 +13,6 @@ import matplotlib.pyplot as plt                                  # Plotting
 from matplotlib.widgets import SpanSelector                      # Interactive span selector
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # Embedding Matplotlib in Tkinter
 
-from scipy.interpolate import make_interp_spline           # Smooth curve interpolation
-
 # --- GUI: Tkinter Modules ---
 import tkinter as tk
 from tkinter import (
@@ -100,6 +98,10 @@ class FitApp(tk.Tk):
         
         # LaTeX rendering temporary variable
         self.latex_label = None
+
+        # Plot scale variables
+        self.left_scale_var = tk.StringVar(value="log")
+        self.right_scale_var = tk.StringVar(value="log")
 
         # --- File selection ---
         file_frame = ttk.Frame(self)
@@ -223,8 +225,7 @@ class FitApp(tk.Tk):
         self.update_latex_display()
 
         # --- Plot area ---
-        self.fig, (self.ax_log, self.ax_lin) = plt.subplots(1, 2, figsize=(12, 4), sharex=True)
-        self.ax_log.set_yscale('log')
+        self.fig, (self.ax_left, self.ax_right) = plt.subplots(1, 2, figsize=(12, 4))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().pack(padx=10, pady=10, fill='both', expand=True)
 
@@ -236,8 +237,25 @@ class FitApp(tk.Tk):
         elif 'props' in sig.parameters:
             span_args['props'] = dict(alpha=0.3, facecolor='blue')
 
-        self.span_log = SpanSelector(self.ax_log, self.on_select, **span_args)
-        self.span_lin = SpanSelector(self.ax_lin, self.on_select, **span_args)
+        self.span_left = SpanSelector(self.ax_left, self.on_select, **span_args)
+        self.span_right = SpanSelector(self.ax_right, self.on_select, **span_args)
+        
+        # --- Plot scale controls ---
+        scale_frame = ttk.Frame(self)
+        scale_frame.pack(padx=10, pady=5, fill='x')
+        
+        ttk.Label(scale_frame, text="Left Plot Scale:").pack(side='left')
+        left_scale_menu = ttk.OptionMenu(scale_frame, self.left_scale_var, "log", "linear", "log", command=lambda _: self.update_plot_scales())
+        left_scale_menu["menu"].config(font=self.out_fit_sec)
+        left_scale_menu.configure(style="Custom.TMenubutton")
+        left_scale_menu.pack(side='left', padx=5)
+        
+        ttk.Label(scale_frame, text="Right Plot Scale:").pack(side='left', padx=(20, 0))
+        right_scale_menu = ttk.OptionMenu(scale_frame, self.right_scale_var, "log", "linear", "log", command=lambda _: self.update_plot_scales())
+        right_scale_menu["menu"].config(font=self.out_fit_sec)
+        right_scale_menu.configure(style="Custom.TMenubutton")
+        right_scale_menu.pack(side='left', padx=5)
+        self.update_plot_scales()
         
         # --- Horizontal separator ---
         separator = ttk.Separator(self, orient='horizontal')
@@ -262,6 +280,15 @@ class FitApp(tk.Tk):
         self.result_text2.bind("<Key>", lambda e: "break")
         self.result_text2.config(cursor="arrow")
 
+    def update_plot_scales(self):
+        """Update the scales of both plots based on the selected options."""
+        left_scale = self.left_scale_var.get()
+        right_scale = self.right_scale_var.get()
+        
+        self.ax_left.set_yscale(left_scale)
+        self.ax_right.set_yscale(right_scale)
+        
+        self.plot_data()
 
     def set_manual_range(self):
         """Set a manual range for the selected data."""
@@ -425,80 +452,143 @@ class FitApp(tk.Tk):
         self.plot_data()
 
     def plot_data(self):
-        """Plot the current data and fits in logarithmic and linear scale. Uses the selected subset and temporary fits. For negative values, the absolute value is plotted in the log plot. Zero values are replaced with a small value to avoid log(0)."""
-        self.ax_log.clear()
-        self.ax_lin.clear()
-        self.ax_log.set_yscale('log')
-        self.fig.suptitle("Logarithmic and Linear Visualization", fontsize=14)
-        if self.current_x is not None:
-            abs_y = np.abs(self.current_y)
-            abs_y[abs_y == 0] = 1e-12  # keine Nullwerte im Log-Plot
-            self.ax_log.scatter(self.current_x, abs_y, label='J-Data', s=20)
-            self.ax_lin.scatter(self.current_x, self.current_y, label='J-Data', s=20)
+            """Plot the current data and fits in both plots with configurable scales."""
+            self.ax_left.clear()
+            self.ax_right.clear()
 
-        subset = self.subset_var.get()
-        fits_to_plot = self.fits + ([self.temp_fit] if self.temp_fit else [])
+            # Skalierungsfaktoren für die Umrechnung einmalig am Anfang berechnen
+            try:
+                # Umrechnung von E [V/m] -> U [V] durch Multiplikation mit der Dicke in Metern
+                thickness_m = float(self.new_thickness.get()) * 1e-9  # Annahme: Eingabe in nm
+                # Umrechnung von J [A/m^2] -> I [A] durch Multiplikation mit der Fläche in m^2
+                area_m2 = float(self.new_area.get()) * 1e-12      # Annahme: Eingabe in µm^2
+            except (ValueError, TypeError):
+                # Fallback, falls die Eingabefelder leer oder ungültig sind
+                thickness_m = 1e-9  # Default 1 nm
+                area_m2 = 1e-12     # Default 1 µm²
+            
+            # Skalierung der y-Achsen (log/linear) anwenden
+            left_scale = self.left_scale_var.get()
+            right_scale = self.right_scale_var.get()
+            self.ax_left.set_yscale(left_scale)
+            self.ax_right.set_yscale(right_scale)
+            
+            # Titel setzen
+            left_title = f"J/E ({left_scale.capitalize()} Scale)"
+            right_title = f"I/U ({right_scale.capitalize()} Scale)"
+            self.fig.suptitle(f"{left_title} and {right_title}", fontsize=14)
+            
+            if self.current_x is not None:
+                y_left = self.current_y.copy()
+                y_right = self.current_y.copy()
+                
+                # Für log-Skala Absolutwerte verwenden und Nullen behandeln
+                if left_scale == 'log':
+                    y_left = np.abs(y_left)
+                    y_left[y_left == 0] = 1e-12
+                if right_scale == 'log':
+                    y_right = np.abs(y_right)
+                    y_right[y_right == 0] = 1e-12
+                
+                # Linker Plot (J vs. E)
+                self.ax_left.scatter(self.current_x, y_left, label='J-Data', s=20)
 
-        # Filter fits je nach Subset
-        if subset.endswith("Reverse"):
-            fits_to_plot = [fit for fit in fits_to_plot if fit.get('state') == 'high']
-        elif subset.endswith("Forward"):
-            fits_to_plot = [fit for fit in fits_to_plot if fit.get('state') == 'low']
-        # sonst: alle wie gehabt
+                # Rechter Plot (I vs. U) mit korrigierter Umrechnung
+                x_volts = self.current_x * thickness_m
+                y_amps = y_right * area_m2
+                self.ax_right.scatter(x_volts, y_amps, label='I-Data', s=20)
 
-        for fit in fits_to_plot:
-            x_min, x_max = fit['range']
+            # Plotten der Fits
+            subset = self.subset_var.get()
+            fits_to_plot = self.fits + ([self.temp_fit] if self.temp_fit else [])
 
-            # 1) Zunächst die x- und y-Werte des Fits bestimmen: entweder gespeicherte Arrays oder neu berechnen
-            if 'fit_xs' in fit and 'fit_ys' in fit:
-                xs_full = np.array(fit['fit_xs'])
-                ys_full = np.array(fit['fit_ys'])
-            else:
-                xs_full = np.linspace(x_min, x_max, 200)
-                try:
-                    ys_full = fit['func'](xs_full, *fit['popt'])
-                except Exception:
+            if subset.endswith("Reverse"):
+                fits_to_plot = [fit for fit in fits_to_plot if fit.get('state') == 'high']
+            elif subset.endswith("Forward"):
+                fits_to_plot = [fit for fit in fits_to_plot if fit.get('state') == 'low']
+
+            for fit in fits_to_plot:
+                x_min, x_max = fit['range']
+
+                if 'fit_xs' in fit and 'fit_ys' in fit:
+                    xs_full = np.array(fit['fit_xs'])
+                    ys_full = np.array(fit['fit_ys'])
+                else:
+                    xs_full = np.linspace(x_min, x_max, 200)
+                    try:
+                        ys_full = fit['func'](xs_full, *fit['popt'])
+                    except Exception:
+                        continue
+
+                # Subset-Maske anwenden
+                mask = np.ones_like(xs_full, dtype=bool)
+                if subset.startswith("Positive"):
+                    mask = xs_full >= 0
+                elif subset.startswith("Negative"):
+                    mask = xs_full <= 0
+                
+                xs = xs_full[mask]
+                ys = ys_full[mask]
+                if xs.size < 2:
                     continue
 
-            # 2) Subset-Maske auf xs_full anwenden
-            if subset.startswith("Positive"):
-                mask = xs_full >= 0
-            elif subset.startswith("Negative"):
-                mask = xs_full <= 0
-            else:
-                mask = np.ones_like(xs_full, dtype=bool)
+                # y-Werte für die Plots basierend auf der Skala vorbereiten
+                ys_left = ys.copy()
+                ys_right = ys.copy()
+                
+                if left_scale == 'log':
+                    ys_left = np.abs(ys_left)
+                    ys_left[ys_left == 0] = 1e-12
+                if right_scale == 'log':
+                    ys_right = np.abs(ys_right)
+                    ys_right[ys_right == 0] = 1e-12
 
-            xs = xs_full[mask]
-            ys = ys_full[mask]
-            if xs.size < 2:
-                continue
+                label = f"{fit.get('label','Fit')}: {fit['model']} ({fit.get('method','')}) [{x_min:.2g}, {x_max:.2g}]"
 
-            # 3) Plotten im Log- und Linear-Plot
-            abs_ys = np.abs(ys)
-            abs_ys[abs_ys == 0] = 1e-12
-            label = f"{fit.get('label','Fit')}: {fit['model']} ({fit.get('method','')}) [{x_min:.2g}, {x_max:.2g}]"
+                # Linken Fit plotten (J vs. E)
+                self.ax_left.plot(xs, ys_left, label=label)
+                
+                # Rechten Fit plotten (I vs. U) mit korrigierter Umrechnung
+                xs_volts = xs * thickness_m
+                ys_amps = ys_right * area_m2
+                self.ax_right.plot(xs_volts, ys_amps, label=label)
 
-            self.ax_log.plot(xs, abs_ys, label=label)
-            self.ax_lin.plot(xs, ys, label=label)
-            self.ax_log.set_title("Logarithmic Plot")
-            self.ax_lin.set_title("Linear Plot")
+            # Achsenbeschriftungen und Layout
+            use_latex = plt.rcParams.get("text.usetex", False)
+            
+            ylabel_left = r'$|J|~[A/m^2]$' if left_scale == 'log' else r'$J~[A/m^2]$'
+            ylabel_left_plain = '|J| [A/m^2]' if left_scale == 'log' else 'J [A/m^2]'
+            
+            ylabel_right = r'$|I|~[A]$' if right_scale == 'log' else r'$I~[A]$'
+            ylabel_right_plain = '|I| [A]' if right_scale == 'log' else 'I [A]'
+            
+            xlabel_left = r'$E~[V/m]$'
+            xlabel_left_plain = 'E [V/m]'
+            xlabel_right = r'$U~[V]$'
+            xlabel_right_plain = 'U [V]'
+            
+            self.ax_left.set_xlabel(xlabel_left if use_latex else xlabel_left_plain, fontsize=15)
+            self.ax_left.set_ylabel(ylabel_left if use_latex else ylabel_left_plain, fontsize=15)
+            
+            self.ax_right.set_xlabel(xlabel_right if use_latex else xlabel_right_plain, fontsize=15)
+            self.ax_right.set_ylabel(ylabel_right if use_latex else ylabel_right_plain, fontsize=15)
+            
+            for ax in [self.ax_left, self.ax_right]:
+                ax.tick_params(axis='both', labelsize=14)
+                ax.legend(loc='best', fontsize=13)
+                ax.grid(True)
 
-        # Achsenbeschriftungen und Legende in LaTeX, falls aktiviert
-        use_latex = plt.rcParams.get("text.usetex", False)
-        # Raw-TeX (kein \mathrm), Nicht-Latex-Variante als Klartext
-        ylabels_latex = [r'$|J|~[A/m^2]$', r'$J~[A/m^2]$']
-        ylabels_plain = ['|J| [A/m^2]', 'J [A/m^2]']
-        xlabels_latex = r'$E~[V/m]$'
-        xlabel_plain = 'E [V/m]'
-        for ax, ylabel_latex, ylabel_plain in zip([self.ax_log, self.ax_lin], ylabels_latex, ylabels_plain):
-            ax.set_xlabel(xlabels_latex if use_latex else xlabel_plain, fontsize=15)
-            ax.set_ylabel(ylabel_latex if use_latex else ylabel_plain, fontsize=15)
-            ax.tick_params(axis='both', labelsize=14)
-            ax.legend(loc='best', fontsize=13)
-            ax.grid(True)
+            # Achsenbereiche explizit setzen
+            if self.current_x is not None:
+                # Linker Plot: E-Field Bereich
+                self.ax_left.set_xlim(np.min(self.current_x) * 1.1, np.max(self.current_x) * 1.1)
+                
+                # Rechter Plot: Spannungsbereich
+                x_volts_range = self.current_x * thickness_m
+                self.ax_right.set_xlim(np.min(x_volts_range) * 1.1, np.max(x_volts_range) * 1.1)
 
-        self.fig.tight_layout()
-        self.canvas.draw()
+            self.fig.tight_layout()
+            self.canvas.draw()
 
     def on_select(self, xmin, xmax):
         """Callback for the SpanSelector to update the selected range."""
