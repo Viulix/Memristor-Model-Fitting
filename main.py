@@ -196,8 +196,6 @@ class FitApp(tk.Tk):
         delTempFitButton = ttk.Button(range_frame, text="Delete Temp. Fit", command=self.apply_subset)
         delTempFitButton.pack(side='left', padx=5)
         
-        interpolateButton = ttk.Button(range_frame, text="Interpolate Fits", command=self.interpolate_fits)
-        interpolateButton.pack(side='left', padx=5)
 
         # --- Fit list display ---
         fit_list_frame = ttk.Frame(self)
@@ -675,114 +673,6 @@ class FitApp(tk.Tk):
                     text_widget.tag_add('header', f"{i}.0", f"{i}.end")
 
             text_widget.configure(state='disabled')
-    
-    def interpolate_fits(self):
-        """Interpolate fits for the selected states (high and low) using a spline. Uses the selected polynomial degree, which is asked from the user.
-
-        If only one state is available, interpolate only that state. If one state is already interpolated, allow the other to be interpolated later.
-        """
-        if len(self.fits) < 2:
-            error_messagebox("Error", "At least two fits are required for interpolation.", font=self.out_fit_sec)
-            return
-
-        # Ask for polynomial degree
-        k = ask_integer("Polynomial Degree", "What degree should the interpolation polynomial have?", font=self.out_fit_sec)
-        if not k:
-            return
-
-        # Helper to interpolate fits by state
-        def interpolate_state(state_label):
-            state_fits = [f for f in self.fits if f.get('state') == state_label]
-            if len(state_fits) < 2:
-                return None, None
-            sorted_fits = sorted(state_fits, key=lambda f: f['range'][0])
-            xs_all = []
-            ys_all = []
-            for fit in sorted_fits:
-                xs = np.array(fit.get('fit_xs'))
-                ys = np.array(fit.get('fit_ys'))
-                xs_all.append(xs)
-                ys_all.append(ys)
-            xs_concat = np.concatenate(xs_all)
-            ys_concat = np.concatenate(ys_all)
-            sort_idx = np.argsort(xs_concat)
-            xs_sorted = xs_concat[sort_idx]
-            ys_sorted = ys_concat[sort_idx]
-            return xs_sorted, ys_sorted
-
-        # Check if already interpolated
-        already_high = any(f.get('model') == 'interpolated_high' for f in self.fits)
-        already_low = any(f.get('model') == 'interpolated_low' for f in self.fits)
-
-        xs_high, ys_high = interpolate_state("high")
-        xs_low, ys_low = interpolate_state("low")
-
-        # If both are missing, nothing to do
-        if xs_high is None and xs_low is None:
-            error_messagebox("Interpolation", "Not enough fits with state 'high' or 'low' for interpolation.")
-            return
-
-        # Interpolate high if possible and not already done
-        if xs_high is not None and not already_high:
-            xs_interp_high = np.linspace(xs_high[0], xs_high[-1], 500)
-            try:
-                spline_high = make_interp_spline(xs_high, ys_high, k=k)
-                ys_high_interp = spline_high(xs_interp_high)
-            except Exception as e:
-                error_messagebox("Interpolation Error", f"Interpolation failed for state 'high': {e}")
-                return
-            interp_high = {
-                'model': 'interpolated_high',
-                'range': (xs_interp_high[0], xs_interp_high[-1]),
-                'popt': [],
-                'pcov': None,
-                'func': None,
-                'method': 'spline',
-                'resultmessage': 'Int. fit (spline) for high',
-                'fit_xs': xs_interp_high,
-                'fit_ys': ys_high_interp,
-                'label': 'Interpolated (high)',
-                'state': 'high',
-                'color': 'red'
-            }
-            self.fits.append(interp_high)
-
-        # Interpolate low if possible and not already done
-        if xs_low is not None and not already_low:
-            xs_interp_low = np.linspace(xs_low[0], xs_low[-1], 500)
-            try:
-                spline_low = make_interp_spline(xs_low, ys_low, k=k)
-                ys_low_interp = spline_low(xs_interp_low)
-            except Exception as e:
-                error_messagebox("Interpolation Error", f"Interpolation failed for state 'low': {e}")
-                return
-            interp_low = {
-                'model': 'interpolated_low',
-                'range': (xs_interp_low[0], xs_interp_low[-1]),
-                'popt': [],
-                'pcov': None,
-                'func': None,
-                'method': 'spline',
-                'resultmessage': 'Int. fit (spline) for low',
-                'fit_xs': xs_interp_low,
-                'fit_ys': ys_low_interp,
-                'label': 'Interpolated (low)',
-                'state': 'low',
-                'color': 'blue'
-            }
-            self.fits.append(interp_low)
-
-        if (xs_high is not None and xs_low is not None) and (not already_high and not already_low):
-            # If both are present and both are new, try to connect at endpoints
-            # Find the interpolated fits just added
-            interp_high = self.fits[-2]
-            interp_low = self.fits[-1]
-            # Average endpoints
-            interp_high['fit_ys'][0] = interp_low['fit_ys'][0] = (interp_high['fit_ys'][0] + interp_low['fit_ys'][0]) / 2
-            interp_high['fit_ys'][-1] = interp_low['fit_ys'][-1] = (interp_high['fit_ys'][-1] + interp_low['fit_ys'][-1]) / 2
-
-        self.update_fit_list()
-        self.plot_data()
 
     def update_latex_display(self, font_size=12, dpi=150):
         """Update the LaTeX display based on the selected model."""
