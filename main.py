@@ -174,6 +174,9 @@ class FitApp(tk.Tk):
         saveFitButton = ttk.Button(action_frame, text="Save Fits", command=self.save_fits)
         saveFitButton.pack(side='left', padx=5)
 
+        extrapolateButton = ttk.Button(action_frame, text="Extrapolate Fit", command=self.extrapolate_fit)
+        extrapolateButton.pack(side='left', padx=5)
+
         # --- Selected range display ---
         range_frame = ttk.Frame(self)
         range_frame.pack(padx=10, pady=5, fill='x')
@@ -633,6 +636,7 @@ class FitApp(tk.Tk):
             error_messagebox("Save Error", f"Failed to save fits: {e}")
 
     def display_fit_result(self, fit_result):
+        
         self.result_text.configure(state='normal')
         self.result_text2.configure(state='normal')
 
@@ -642,7 +646,7 @@ class FitApp(tk.Tk):
         self.result_text.configure(font=self.out_fit_sec)
         self.result_text2.configure(font=self.out_fit_sec)
 
-        # Fit-Report aufteilen
+        # Split fit report into header and variables
         report = fit_result.fit_report()
         report = report.replace("[[", "[")
         report = report.replace("]]", "]") 
@@ -660,11 +664,11 @@ class FitApp(tk.Tk):
             else:
                 header_lines.append(line)
 
-        # In die Textfelder einfügen
+        # Add model and method info to header
         self.result_text.insert(tk.END, '\n'.join(header_lines))
         self.result_text2.insert(tk.END, '\n'.join(variable_lines))
 
-        # Optional: Überschriften fett machen
+        # Optional: Make headers bold
         for text_widget in [self.result_text, self.result_text2]:
             text_widget.tag_configure('header', font=self.default_font)
 
@@ -673,6 +677,56 @@ class FitApp(tk.Tk):
                     text_widget.tag_add('header', f"{i}.0", f"{i}.end")
 
             text_widget.configure(state='disabled')
+
+    def extrapolate_fit(self):
+        """Extrapolate the selected fit over the entire data range and add it as a new fit."""
+        sel = self.fit_listbox.curselection()
+        if not sel:
+            error_messagebox("Error", "Please select a fit from the list first.", font=self.out_fit_sec)
+            return
+
+        idx = sel[0]
+        if idx >= len(self.fits):
+            error_messagebox("Error", "Invalid fit index.", font=self.out_fit_sec)
+            return
+
+        fit = self.fits[idx]
+        func = fit.get('func')
+        popt = fit.get('popt')
+
+        if func is None or popt is None:
+            error_messagebox("Error", "The selected fit does not contain a function or parameters.", font=self.out_fit_sec)
+            return
+
+        # New x over the entire data range
+        x_min = np.min(self.x_all)
+        x_max = np.max(self.x_all)
+        xs = np.linspace(x_min, x_max, 500)
+
+        try:
+            ys = func(xs, *[p.value for p in popt.values()])
+        except Exception as e:
+                error_messagebox("Error", f"Extrapolation failed: {e}", font=self.out_fit_sec)
+                return
+
+        extrap_fit = {
+           'model': fit['model'],
+           'range': (x_min, x_max),
+           'popt': popt,
+           'pcov': fit.get('pcov'),
+           'func': func,
+           'method': fit.get('method'),
+           'resultmessage': fit.get('resultmessage', 'Extrapolated fit'),
+           'fit_xs': xs,
+           'fit_ys': ys,
+           'label': f"Extrapolated ({fit['model']})",
+           'state': fit.get('state', 'N/A')
+           }
+
+        self.fits.append(extrap_fit)
+        self.update_fit_list()
+        self.plot_data()
+        info_messagebox("Success", "Fit has been extrapolated over the entire range.", font=self.out_fit_sec)
 
     def update_latex_display(self, font_size=12, dpi=150):
         """Update the LaTeX display based on the selected model."""
