@@ -31,7 +31,7 @@ def J_schottky(E, A, phi_B, epsilon_r, T):
     # https://de.wikipedia.org/wiki/Edison-Richardson-Effekt
     phi_B_J = phi_B * q
     exponent = - (q * (phi_B_J - np.sqrt(q*np.abs(E) / (4*np.pi * epsilon_r * eps0)))) / (kB * T)
-    J = A * T**2 * np.exp(exponent)
+    J = np.sign(E) * A * T**2 * np.exp(exponent)
     return J
 
 
