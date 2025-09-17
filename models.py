@@ -120,7 +120,7 @@ models = {
     'Fowler–Nordheim': {
         'func': J_fowler_nordheim,
         'params': {
-            'K_1':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'A J V^-2'},
+            'K_1':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'A V^-2'},
             'K_2':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'V m^-1 J^-3/2'},
         },
         'latex': r"$J_{\mathrm{FN}} = \frac{q^2}{8\pi h \Phi_B} E^2 \exp\left( \frac{-8\pi \sqrt{2qm^*} \, \Phi_B^{3/2}}{3hE} \right)$"
