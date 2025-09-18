@@ -9,7 +9,6 @@ import os                          # For file path operations
 # --- Third-Party Imports ---
 import numpy as np                 # Numerical computing
 from PIL import Image, ImageTk     # Image handling for Tkinter --> for rendering LaTeX equations
-
 import matplotlib.pyplot as plt                                  # Plotting
 from matplotlib.widgets import SpanSelector                      # Interactive span selector
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # Embedding Matplotlib in Tkinter
@@ -609,18 +608,7 @@ class FitApp(tk.Tk):
         if xmin == xmax:
             return
         x0, x1 = sorted([xmin, xmax])
-        
-        # Check which plot was used for selection by comparing axes
-        caller_ax = None
-        import traceback
-        for line in traceback.format_stack():
-            if 'ax_left' in line:
-                caller_ax = self.ax_left
-                break
-            elif 'ax_right' in line:
-                caller_ax = self.ax_right
-                break
-        
+
         # Alternative method: check if selection is in voltage range (right plot)
         try:
             thickness_m = float(self.new_thickness.get()) * 1e-9
