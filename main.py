@@ -609,6 +609,33 @@ class FitApp(tk.Tk):
         if xmin == xmax:
             return
         x0, x1 = sorted([xmin, xmax])
+        
+        # Check which plot was used for selection by comparing axes
+        caller_ax = None
+        import traceback
+        for line in traceback.format_stack():
+            if 'ax_left' in line:
+                caller_ax = self.ax_left
+                break
+            elif 'ax_right' in line:
+                caller_ax = self.ax_right
+                break
+        
+        # Alternative method: check if selection is in voltage range (right plot)
+        try:
+            thickness_m = float(self.new_thickness.get()) * 1e-9
+            # If selection values are in voltage range (much smaller than E-field), convert back
+            if self.current_x is not None:
+                max_voltage = np.max(self.current_x) * thickness_m
+                min_voltage = np.min(self.current_x) * thickness_m
+                # Check if selection is likely from voltage plot (right plot)
+                if abs(x1 - x0) < abs(max_voltage - min_voltage) * 2 and max(abs(x0), abs(x1)) < abs(max_voltage) * 2:
+                    # Convert from voltage back to electric field
+                    x0 = x0 / thickness_m
+                    x1 = x1 / thickness_m
+        except:
+            pass
+        
         self.selected_range = (x0, x1)
         self.range_label.config(text=f"[{x0:.3g}, {x1:.3g}]")
         self.range_min_var.set(f"{x0:.5g}")
@@ -943,6 +970,7 @@ class FitApp(tk.Tk):
 
         except Exception as e:
             error_messagebox("Error during export", f"Error:\n{str(e)}", font=self.out_fit_sec)
+    
     def on_closing(self):
         self.destroy()
         sys.exit()
