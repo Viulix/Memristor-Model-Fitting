@@ -5,11 +5,12 @@ import warnings                    # To control or suppress warnings
 import datetime                    # For handling timestamps and time formatting
 import sys                         # System-specific parameters and functions
 import os                          # For file path operations
+import json                        # For saving and loading configuration
 
 # --- Third-Party Imports ---
 import numpy as np                 # Numerical computing
 from PIL import Image, ImageTk     # Image handling for Tkinter --> for rendering LaTeX equations
-import matplotlib.pyplot as plt                                  # Plotting
+import matplotlib.pyplot as plt            # Plotting
 from matplotlib.widgets import SpanSelector                      # Interactive span selector
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg  # Embedding Matplotlib in Tkinter
 
@@ -24,7 +25,7 @@ import tkinter.font as tkfont  # Font handling for Tkinter
 
 # --- Local Application Imports ---
 from models import models           # Model definitions. Contains the functions and parameters for fitting models.
-from fit_logic import load_txtfile, perform_fit  # File parsing and fitting logic
+from fit_logic import load_txtfile, perform_fit, performFitByModel  # File parsing and fitting logic
 from ParamDialog import info_messagebox, error_messagebox, ask_integer  # Dialog for setting parameter bounds interactively
 
 # --- Matplotlib Configuration ---
@@ -40,6 +41,7 @@ class FitApp(tk.Tk):
         super().__init__()
         self.title("Data Fitting App")
         self.state('zoomed')
+        self.config_file = "config.json"
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         # --- Set up the main window layout and style ---
         font_size = 12
@@ -129,7 +131,7 @@ class FitApp(tk.Tk):
         self.new_temperature = tk.StringVar(value="300")
         ttk.Entry(file_frame, textvariable=self.new_temperature, width=5, font=self.out_fit_sec).pack(side='left', padx=5)
 
-        # Änderungen an Area/Thickness triggern Update
+        # Update Area/Thickness triggers
         self.new_area.trace_add("write", lambda *args: self.on_area_thickness_change())
         self.new_thickness.trace_add("write", lambda *args: self.on_area_thickness_change())
 
@@ -158,6 +160,46 @@ class FitApp(tk.Tk):
         style.configure("Custom.TMenubutton", font=self.out_fit_sec)
         model_menu.configure(style="Custom.TMenubutton")
         model_menu.pack(side='left', padx=5)
+
+        # --- Combination fit selection (top right) ---
+        combo_frame = ttk.Frame(action_frame)
+        combo_frame.pack(side='right', padx=5)
+        
+
+        # Checkbox to enable combination fitting
+        self.enable_combo_var = tk.BooleanVar(value=False)
+        combo_label_frame = ttk.Frame(combo_frame)
+        combo_label_frame.pack(side='top', anchor='e')
+        
+        ttk.Label(combo_label_frame, text="Combination Fit:", font=self.default_font).pack(side='left')
+        combo_checkbox = ttk.Checkbutton(combo_label_frame, text="Active", variable=self.enable_combo_var, command=self.update_latex_display)
+        combo_checkbox.pack(side='left', padx=(5, 240))
+        
+        # Frame for the two model selectors
+        combo_selectors_frame = ttk.Frame(combo_frame)
+        combo_selectors_frame.pack(side='top', anchor='e', pady=2)
+        
+        # First model selector
+        ttk.Label(combo_selectors_frame, text="Model 1:").pack(side='left')
+        self.combo_model1_var = tk.StringVar()
+        if model_names:
+            self.combo_model1_var.set(model_names[0])
+        combo1_menu = ttk.OptionMenu(combo_selectors_frame, self.combo_model1_var, model_names[0] if model_names else "", *model_names, command=lambda _: self.update_latex_display())
+        combo1_menu["menu"].config(font=self.out_fit_sec)
+        combo1_menu.configure(style="Custom.TMenubutton")
+        combo1_menu.pack(side='left', padx=2)
+        
+        # Second model selector
+        ttk.Label(combo_selectors_frame, text="Model 2:").pack(side='left')
+        self.combo_model2_var = tk.StringVar()
+        if len(model_names) > 1:
+            self.combo_model2_var.set(model_names[1])
+        elif model_names:
+            self.combo_model2_var.set(model_names[0])
+        combo2_menu = ttk.OptionMenu(combo_selectors_frame, self.combo_model2_var, model_names[0] if model_names else "", *model_names, command=lambda _: self.update_latex_display())
+        combo2_menu["menu"].config(font=self.out_fit_sec)
+        combo2_menu.configure(style="Custom.TMenubutton")
+        combo2_menu.pack(side='left', padx=2)
 
         # Fit method selection
         ttk.Label(action_frame, text="Fit Method:").pack(side='left', padx=(20, 0))
@@ -293,6 +335,9 @@ class FitApp(tk.Tk):
         self.result_text2.bind("<Key>", lambda e: "break")
         self.result_text2.config(cursor="arrow")
 
+        # Load configuration at the end of initialization
+        self.load_config()
+
     def update_plot_scales(self):
         """Update the scales of both plots based on the selected options."""
         left_scale = self.left_scale_var.get()
@@ -322,28 +367,42 @@ class FitApp(tk.Tk):
             error_messagebox("Invalid Range", "Please enter valid numeric values for the range.", font=self.out_fit_sec)
             return
 
+    def load_data_from_path(self, path):
+        """Loads data from a given file path and updates the application state."""
+        if not path or not os.path.exists(path):
+            if path: # Only show error if path was provided but not found
+                error_messagebox("File Error", f"Could not find file: {path}", font=self.out_fit_sec)
+            self.raw_x, self.raw_y = None, None
+            self.file_var.set("")
+            return False
+
+        self.file_var.set(path)
+        try:
+            x, y = load_txtfile(path)
+            self.raw_x = np.array(x)
+            self.raw_y = np.array(y)
+            self.update_scaled_data()
+        except Exception as e:
+            error_messagebox("File Error", f"Could not load file: {e}", font=self.out_fit_sec)
+            self.raw_x, self.raw_y = None, None
+            return False
+
+        # Reset fits and temp
+        self.fits.clear()
+        self.temp_fit = None
+        self.selected_range = None
+        self.range_label.config(text="None")
+        self.update_fit_list()
+        # Apply subset and plot
+        self.apply_subset()
+        return True
+
     def browse_file(self):
         """Open a file dialog to select a data file for the fitting process."""
         path = filedialog.askopenfilename(title="Select data file",
                                           filetypes=[("TXT/QTJ files","*.txt *.qtj *.csv"), ("All files","*.*")])
         if path:
-            self.file_var.set(path)
-            try:
-                x, y = load_txtfile(path)
-                self.raw_x = np.array(x)
-                self.raw_y = np.array(y)
-                self.update_scaled_data()
-            except Exception as e:
-                error_messagebox("File Error", f"Could not load file: {e}", font=self.out_fit_sec)
-                return
-            # Reset fits and temp
-            self.fits.clear()
-            self.temp_fit = None
-            self.selected_range = None
-            self.range_label.config(text="None")
-            self.update_fit_list()
-            # Apply subset and plot
-            self.apply_subset()
+            self.load_data_from_path(path)
 
     def on_area_thickness_change(self):
         """Callback wenn Area oder Thickness geändert werden."""
@@ -631,72 +690,6 @@ class FitApp(tk.Tk):
         self.temp_fit = None
         self.plot_data()
 
-    def fit_selection(self):
-        """Perform a fit on the selected range of data using the selected model and method."""
-        if self.current_x is None:
-            error_messagebox("Error", "No data loaded. Please load a data file first.", font=self.out_fit_sec)
-            return
-        if not self.selected_range:
-            error_messagebox("Error", "No range selected.", font=self.out_fit_sec)
-            return
-        model_key = self.model_var.get()
-        if model_key not in models:
-            error_messagebox("Error", "Invalid model selected.", font=self.out_fit_sec)
-            return
-        x_min, x_max = self.selected_range
-        mask = (self.current_x >= x_min) & (self.current_x <= x_max)
-        xs = self.current_x[mask]
-        ys = self.current_y[mask]
-        if len(xs) < 2:
-            error_messagebox("Error", "Not enough data points in the selected range.", font=self.out_fit_sec)
-            return
-        func = models[model_key]['func']
-        method = self.fitmethod_var.get()
-        # If lmfit selected but not available, warn and fallback
-        fit_warnings = ""
-        try:
-            with warnings.catch_warnings(record=True) as wlist:
-                warnings.simplefilter("always")
-                # Perform the fit using the selected method
-                fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
-                if fit_result is None:
-                    return
-                for w in wlist:
-                    fit_warnings += f"Warning: {w.message}\n"
-        except Exception as e:
-            error_messagebox("Fit Error", f"Fitting failed ({method}): {e}", font=self.out_fit_sec)
-            return
-        
-        state = "N/A"
-        if self.subset_var.get().endswith("Forward"):
-            state = "low"
-        elif self.subset_var.get().endswith("Reverse"):
-            state = "high"
-
-           
-        self.temp_fit = {
-            'model': model_key,
-            'range': (x_min, x_max),
-            'popt': fit_result.params,
-            'pcov': fit_result.covar,
-            'func': func,
-            'method': method,
-            'resultmessage': fit_result.fit_report(),
-            'state': state
-        }
-        # Display results
-        self.display_fit_result(fit_result)
-
-        if fit_warnings:
-            self.result_text2.insert(tk.END, "\n--- Runtime-Warnings---\n")
-            self.result_text2.insert(tk.END, fit_warnings)
-        fit_xs = np.linspace(x_min, x_max, 200)
-        fit_ys = models[model_key]["func"](fit_xs, *fit_result.best_values.values())
-
-        self.temp_fit['fit_xs'] = fit_xs
-        self.temp_fit['fit_ys'] = fit_ys
-        self.plot_data()
-
     def add_fit(self):
         if not self.temp_fit:
             error_messagebox("Error", "No temporary fit to add. Perform a fit first.", font=self.out_fit_sec)
@@ -752,19 +745,44 @@ class FitApp(tk.Tk):
         header_lines = []
         variable_lines = []
         writing_variables = False
-        # Füge im [Variables]-Abschnitt die Einheiten aus models hinzu
+        
+        # Handle units for combination fits differently
         try:
-            model_key = self.model_var.get()
-            model_def = models.get(model_key, {}) if isinstance(models, dict) else {}
             units_map = {}
-
-            # Extract units from parameter definitions
-            if isinstance(model_def.get('params'), dict):
-                for param_name, param_config in model_def['params'].items():
+            
+            if self.enable_combo_var.get():
+                # For combination fits, get units from both models
+                model1_key = self.combo_model1_var.get()
+                model2_key = self.combo_model2_var.get()
+                
+                model1 = models.get(model1_key, {})
+                model2 = models.get(model2_key, {})
+                
+                # Add units from model 1 with _1 suffix
+                for param_name, param_config in model1.get('params', {}).items():
                     if isinstance(param_config, dict) and 'unit' in param_config:
-                        units_map[str(param_name)] = str(param_config['unit'])
-                        # Add temperature unit which is common to all models
-                        units_map['T'] = 'K'
+                        if param_name == 'T':
+                            units_map['T'] = str(param_config['unit'])
+                        else:
+                            units_map[f"{param_name}_1"] = str(param_config['unit'])
+                
+                # Add units from model 2 with _2 suffix
+                for param_name, param_config in model2.get('params', {}).items():
+                    if isinstance(param_config, dict) and 'unit' in param_config:
+                        if param_name != 'T':  # Skip T as it's shared
+                            units_map[f"{param_name}_2"] = str(param_config['unit'])
+            else:
+                # Single model fit
+                model_key = self.model_var.get()
+                model_def = models.get(model_key, {}) if isinstance(models, dict) else {}
+                
+                # Extract units from parameter definitions
+                if isinstance(model_def.get('params'), dict):
+                    for param_name, param_config in model_def['params'].items():
+                        if isinstance(param_config, dict) and 'unit' in param_config:
+                            units_map[str(param_name)] = str(param_config['unit'])
+                            
+            units_map['T'] = 'K'  # Temperature unit is always K
 
             if units_map:
                 new_lines = []
@@ -786,6 +804,7 @@ class FitApp(tk.Tk):
                 lines = new_lines
         except Exception:
             pass
+            
         for line in lines:
             if line.strip().startswith('[Variables]'):
                 writing_variables = True
@@ -858,37 +877,173 @@ class FitApp(tk.Tk):
         self.plot_data()
         info_messagebox("Success", "Fit has been extrapolated over the entire range.", font=self.out_fit_sec)
 
-    def update_latex_display(self, font_size=12, dpi=150):
-        """Update the LaTeX display based on the selected model."""
-        selected = self.model_var.get()
-        model = models.get(selected, {})
-        latex_string = model.get("latex", r"$\text{Keine Formel}$")
+    def fit_selection(self):
+        """Perform a fit on the selected range using either single or combination model."""
+        if self.current_x is None:
+            error_messagebox("Error", "No data loaded. Please load a data file first.", font=self.out_fit_sec)
+            return
+        if not self.selected_range:
+            error_messagebox("Error", "No range selected.", font=self.out_fit_sec, width=300, height=120)
+            return
+        
+        x_min, x_max = self.selected_range
+        mask = (self.current_x >= x_min) & (self.current_x <= x_max)
+        xs = self.current_x[mask]
+        ys = self.current_y[mask]
+        if len(xs) < 2:
+            error_messagebox("Error", "Not enough data points in the selected range.", font=self.out_fit_sec)
+            return
+        
+        method = self.fitmethod_var.get()
+        fit_warnings = ""
+        
+        # Check if combination fit is enabled
+        func = None # Initialize func
+        if self.enable_combo_var.get():
+            # Combination fit
+            model1_key = self.combo_model1_var.get()
+            model2_key = self.combo_model2_var.get()
+            model_key = f"{model1_key}+{model2_key}"
+            if model1_key not in models or model2_key not in models:
+                error_messagebox("Error", "Invalid combination models selected.", font=self.out_fit_sec)
+                return
 
-        # Altes Label entfernen
+            try:
+                with warnings.catch_warnings(record=True) as wlist:
+                    warnings.simplefilter("always")
+                    # Perform combination fit using the temporary model
+                    fit_result = performFitByModel(xs, ys, model1_key, model2_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
+                    if fit_result is None:
+                        return
+                    func = fit_result.model.eval # Use the model's eval method
+                    for w in wlist:
+                        fit_warnings += f"Warning: {w.message}\n"
+            except Exception as e:
+                    error_messagebox("Fit Error", f"Combination fitting failed ({method}): {e}", font=self.out_fit_sec)
+                    return
+
+        else:
+            # Single model fit
+            model_key = self.model_var.get()
+            if model_key not in models:
+                error_messagebox("Error", "Invalid model selected.", font=self.out_fit_sec)
+                return
+            func = models[model_key]['func']
+            
+            try:
+                with warnings.catch_warnings(record=True) as wlist:
+                    warnings.simplefilter("always")
+                    # Perform single model fit
+                    fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
+                    if fit_result is None:
+                        return
+                    for w in wlist:
+                        fit_warnings += f"Warning: {w.message}\n"
+            except Exception as e:
+                error_messagebox("Fit Error", f"Fitting failed ({method}): {e}", font=self.out_fit_sec)
+                return
+        
+        # Determine state based on subset
+        state = "N/A"
+        if self.subset_var.get().endswith("Forward"):
+            state = "low"
+        elif self.subset_var.get().endswith("Reverse"):
+            state = "high"
+
+        # Store fit result
+        self.temp_fit = {
+            'model': model_key,
+            'range': (x_min, x_max),
+            'popt': fit_result.params,
+            'pcov': fit_result.covar,
+            'func': func,
+            'method': method,
+            'resultmessage': fit_result.fit_report(),
+            'state': state,
+            'is_combination': self.enable_combo_var.get()
+        }
+        
+        # Display results
+        self.display_fit_result(fit_result)
+
+        if fit_warnings:
+            self.result_text2.insert(tk.END, "\n--- Runtime-Warnings---\n")
+            self.result_text2.insert(tk.END, fit_warnings)
+        
+        # Generate fit curve
+        fit_xs = np.linspace(x_min, x_max, 200)
+        try:
+            fit_ys = fit_result.eval(E=fit_xs)
+
+            self.temp_fit['fit_xs'] = fit_xs
+            self.temp_fit['fit_ys'] = fit_ys
+            self.plot_data()
+        except Exception as e:
+            error_messagebox("Error", f"Failed to generate fit curve: {e}", font=self.out_fit_sec)
+
+    def update_latex_display(self, font_size=12, dpi=150):
+        """Update the LaTeX display based on the selected model(s)."""
+        if self.enable_combo_var.get():
+            # Show combination model equation
+            model1_key = self.combo_model1_var.get()
+            model2_key = self.combo_model2_var.get()
+            
+            if model1_key in models and model2_key in models:
+                model1_latex = models[model1_key].get('latex', '')
+                model2_latex = models[model2_key].get('latex', '')
+                
+                # Clean up individual LaTeX expressions by removing outer $ symbols
+                if model1_latex.startswith('$') and model1_latex.endswith('$'):
+                    model1_latex = model1_latex[1:-1]
+                if model2_latex.startswith('$') and model2_latex.endswith('$'):
+                    model2_latex = model2_latex[1:-1]
+
+                # Remove any leading "J =" or similar to avoid duplication
+                model1_latex = model1_latex.replace("\\approx", "=")
+                model1_latex = model1_latex.replace("\propto", "=")
+
+                model2_latex = model2_latex.replace("\\approx", "=")
+                model2_latex = model2_latex.replace("\propto", "=")
+
+                model1_latex = model1_latex.split("=")[1] if "=" in model1_latex else model1_latex
+                model2_latex = model2_latex.split("=")[1] if "=" in model2_latex else model2_latex
+
+
+                # Combine the LaTeX expressions
+                latex_string = f"$J = ({model1_latex}) + ({model2_latex})$"
+            else:
+                latex_string = r"$\text{Select valid models for combination}$"
+        else:
+            # Show single model equation
+            selected = self.model_var.get()
+            model = models.get(selected, {})
+            latex_string = model.get("latex", r"$\text{Keine Formel}$")
+
+        # Remove old label
         if self.latex_label:
             self.latex_label.destroy()
 
-        # Neues Label rendern und anzeigen
+        # Render and display new label
         fig, ax = plt.subplots(figsize=(0.01, 0.01))
         fig.patch.set_visible(False)
         ax.axis('off')
 
-        # Setze den LaTeX-Text
+        # Set LaTeX text
         ax.text(0.5, 0.5, latex_string, fontsize=font_size, ha='center', va='center')
 
-        # Speichere Bild in BytesIO
+        # Save image to BytesIO
         buf = io.BytesIO()
         plt.savefig(buf, format='png', bbox_inches='tight', dpi=dpi, transparent=True)
         buf.seek(0)
         plt.close(fig)
 
-        # Lade Bild mit PIL und konvertiere für Tkinter
+        # Load image with PIL and convert for Tkinter
         image = Image.open(buf)
         photo = ImageTk.PhotoImage(image)
 
-        # Erstelle Tkinter Label
+        # Create Tkinter label
         label = tk.Label(self.latex_frame, image=photo, bg='white')
-        label.image = photo  # <- Referenz halten, sonst wird Bild gelöscht!
+        label.image = photo  # Keep reference so image doesn't get deleted
         self.latex_label = label
         self.latex_label.pack(side='left', padx=5)
 
@@ -1071,7 +1226,63 @@ class FitApp(tk.Tk):
             fallback_img = Image.new('RGBA', (size, size), (128, 128, 128, 100))
             return ImageTk.PhotoImage(fallback_img)
 
+    def save_config(self):
+        """Saves the current settings to a configuration file."""
+        config = {
+            'file_path': self.file_var.get(),
+            'area': self.new_area.get(),
+            'thickness': self.new_thickness.get(),
+            'temperature': self.new_temperature.get(),
+            'subset': self.subset_var.get(),
+            'model': self.model_var.get(),
+            'fit_method': self.fitmethod_var.get(),
+            'enable_combo': self.enable_combo_var.get(),
+            'combo_model1': self.combo_model1_var.get(),
+            'combo_model2': self.combo_model2_var.get(),
+            'left_plot_scale': self.left_scale_var.get(),
+            'right_plot_scale': self.right_scale_var.get(),
+        }
+        try:
+            with open(self.config_file, 'w') as f:
+                json.dump(config, f, indent=4)
+        except Exception as e:
+            print(f"Error saving configuration: {e}")
+
+    def load_config(self):
+        """Loads settings from a configuration file if it exists."""
+        if not os.path.exists(self.config_file):
+            return
+        try:
+            with open(self.config_file, 'r') as f:
+                config = json.load(f)
+
+            # Set all the variables
+            self.new_area.set(config.get('area', '625'))
+            self.new_thickness.set(config.get('thickness', '10'))
+            self.new_temperature.set(config.get('temperature', '300'))
+            self.subset_var.set(config.get('subset', 'All'))
+            self.model_var.set(config.get('model', list(models.keys())[0]))
+            self.fitmethod_var.set(config.get('fit_method', 'leastsq'))
+            self.enable_combo_var.set(config.get('enable_combo', False))
+            self.combo_model1_var.set(config.get('combo_model1', list(models.keys())[0]))
+            self.combo_model2_var.set(config.get('combo_model2', list(models.keys())[1] if len(models.keys()) > 1 else list(models.keys())[0]))
+            self.left_scale_var.set(config.get('left_plot_scale', 'log'))
+            self.right_scale_var.set(config.get('right_plot_scale', 'log'))
+
+            # Load data file if it exists
+            file_path = config.get('file_path')
+            if file_path and os.path.exists(file_path):
+                self.load_data_from_path(file_path)
+
+        except Exception as e:
+            print(f"Error loading configuration: {e}")
+
 # Start up
+    def on_closing(self):
+        self.save_config()
+        self.destroy()
+        sys.exit()
+        
 if __name__ == "__main__":
     app = FitApp()
     app.mainloop()
