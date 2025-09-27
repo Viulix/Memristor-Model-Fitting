@@ -21,7 +21,7 @@ q   = constants.elementary_charge      # Electron charge (C)
 kB  = constants.Boltzmann              # Boltzmann constant (J/K)
 h   = constants.h                      # Planck constant (J·s)
 hbar = constants.hbar                  # Reduced Planck constant (J·s)
-eps0  = constants.epsilon_0              # Vacuum permittivity (F/m)
+eps0  = constants.epsilon_0            # Vacuum permittivity (F/m)
 π   = np.pi
 
 zeroBuffer = 1e-12
@@ -29,15 +29,16 @@ maxExponent = 200
 
 def J_schottky(E, A, phi_B, epsilon_r, T):
     # https://de.wikipedia.org/wiki/Edison-Richardson-Effekt
-    phi_B_J = phi_B * q
-    exponent = - (q * (phi_B_J - np.sqrt(q*np.abs(E) / (4*np.pi * epsilon_r * eps0)))) / (kB * T)
+    exponent = - (q * (phi_B - np.sqrt(q*np.abs(E) / (4*np.pi * epsilon_r * eps0)))) / (kB * T)
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     J = np.sign(E) * A * T**2 * np.exp(exponent)
     return J
 
 
 def J_fowler_nordheim(E, K_1, K_2, phi_B):
     # https://de.wikipedia.org/wiki/Feldemission
-    phi_B_J = phi_B * q
+    phi_B_J = phi_B * q 
     J = K_1 * (E**2 / phi_B_J) * np.exp(-K_2 * (phi_B_J**1.5) / np.abs(E))
     return J
 
@@ -46,12 +47,18 @@ def J_fowler_nordheim(E, K_1, K_2, phi_B):
 def J_direct_tunneling(E, m_eff, phi_B, kappa, t_ox):
     phi_B_J = phi_B * q
     exponent = - (8 * π * np.sqrt(2 * q * np.abs(m_eff) * phi_B_J)) / (3 * h) * kappa * t_ox
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     J = E*np.exp(exponent)
     return J
 
 ### Korrigiert, aber ungenau (?) -> wie ein Dauerhafter Offset. ggf mit Widerstand abgleichen
 def J_ohmic(E, mu, N_C, E_C, E_F, T):
-    exponent = - (E_C - E_F) / (kB * T)
+    E_C_J = E_C * q
+    E_F_J = E_F * q
+    exponent = - (E_C_J - E_F_J) / (kB * T)
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     J = q * mu * N_C * E * np.exp(exponent)
     return J
 
@@ -61,6 +68,8 @@ def J_poole_frenkel(E, mu, N_C, phi_T, epsilon_r, T):
     phi_T_J = phi_T * q
     epsilon = eps0 * epsilon_r
     exponent = -q * (phi_T_J - np.sqrt(q * np.abs(E) / (π * epsilon))) / (kB * T)
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     J = q * mu * N_C * E * np.exp(exponent)
     return J
 
@@ -73,21 +82,30 @@ def J_space_charge_limited(E, mu, epsilon_r, theta, d):
 
 ### Das sigma_0 ist nicht in der Formel enthalten, sondern wird als Vorfaktor verwendet (da lediglich proportional zu E)
 def J_ionic(E, dG, sigma_0, T):
-    exponent = - dG / (kB * T)
+    dG_J = dG * q  # in Joule
+    exponent = - dG_J  / (kB * T)
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     return sigma_0 * (E / T) * np.exp(exponent)
 
 def J_nearest_neighbor_hopping(E, sigma_0, T0, T):
     exponent = - T0 / T
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     return sigma_0 * np.exp(exponent) * E
 
 def J_variable_range_hopping(E, sigma_0, T0, T):
     if T0 < 0: T0 = 0
     exponent = - (T0 / T)**0.25
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     return sigma_0 * np.exp(exponent) * E
 
 def J_trap_assisted_tunneling(E, A, m_eff, phi_T):
     phi_T_J = phi_T * q
     exponent = - 8 * np.pi * np.sqrt(2 * q * np.abs(m_eff)) * (np.abs(phi_T_J))**1.5 / (3 * h * E)
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
     J = A * np.exp(exponent)
     return J
 
@@ -104,8 +122,7 @@ models = {
             'phi_B':     {'init': 0.6,   'min': 0.3,   'max': 1.1,   'unit': 'eV'},
             'epsilon_r': {'init': 6,     'min': 4,     'max': 8,     'unit': '1'},
         },
-        'latex': r"$J_{\mathrm{SE}} = A^* T^2 \exp\left("r"-\frac{q \left( \phi_B - \sqrt{ \frac{qE}{4\pi \varepsilon_r \varepsilon_0} } \right)}{k_B T}"    r"\right)$"
-        #'latex': r"$J_{\mathrm{SE}} = \frac{4\pi q m^*(kT)^2}{h^3} \exp\left( \frac{-q\left( \Phi_B - \sqrt{\frac{qE}{4\pi \varepsilon}} \right)}{kT} \right)$"
+        'latex': r"$J_{\mathrm{SE}} = A T^2 \exp\left("r"-\frac{q \left( \phi_B - \sqrt{ \frac{qE}{4\pi \varepsilon_r \varepsilon_0} } \right)}{k_B T}"    r"\right)$"
     },
     'Poole–Frenkel': {
         'func': J_poole_frenkel,
@@ -122,6 +139,7 @@ models = {
         'params': {
             'K_1':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'A V^-2'},
             'K_2':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'V m^-1 J^-3/2'},
+            'phi_B': {'init': 1,  'min': 0.2,   'max': 3,    'unit': 'eV'},
         },
         'latex': r"$J_{\mathrm{FN}} = \frac{q^2}{8\pi h \Phi_B} E^2 \exp\left( \frac{-8\pi \sqrt{2qm^*} \, \Phi_B^{3/2}}{3hE} \right)$"
     },
@@ -139,9 +157,9 @@ models = {
         'func': J_ohmic,
         'params': {
             'mu':   {'init': 1,      'min': 1e-10,  'max': 1e-3,  'unit': 'm^2/(V s)'},
-            'N_C':  {'init': 1,      'min': 1e22,   'max': 1e27,  'unit': 'm^-3'},
-            'E_C':  {'init': 1,      'min': 0,      'max': 2,     'unit': 'J'},
-            'E_F':  {'init': 1,      'min': 0,      'max': 2,     'unit': 'J'},
+            'N_C':  {'init': 1e25,      'min': 1e22,   'max': 1e27,  'unit': 'm^-3'},
+            'E_C':  {'init': 1,      'min': 0,      'max': 6,     'unit': 'eV'},
+            'E_F':  {'init': 1,      'min': 0,      'max': 6,     'unit': 'eV'},
         },
         'latex': r"$J_{\mathrm{ohmic}} = q \mu N_C E \exp\left[ \frac{-(E_C - E_F)}{kT} \right]$"
     },
@@ -151,7 +169,7 @@ models = {
             'mu':        {'init': 1e-6,   'min': 1e-10,  'max': 1e-4,  'unit': 'm^2/(V s)'},
             'epsilon_r': {'init': 6,      'min': 2,      'max': 25,    'unit': '1'},
             'theta':     {'init': 1,      'min': 1e-3,   'max': 1e2,   'unit': '1'},
-            'd':         {'init': 10e-9,  'min': 1e-15,  'max': 1e-7,  'unit': 'm'},
+            'd':         {'init': 10e-9,  'min': 1e-12,  'max': 1e-7,  'unit': 'm'},
         },
         'latex': r"$J_{\mathrm{SCLC}} = \frac{9}{8} \varepsilon_i \mu \theta \frac{V^2}{d^3}$"
     },
@@ -159,7 +177,7 @@ models = {
         'func': J_ionic,
         'params': {
             'sigma_0': {'init': 1e-4,   'min': 1e-12,  'max': 1e-2,  'unit': 'S m^-1 K'},
-            'dG':      {'init': 0.5,    'min': 0,      'max': 1.5,   'unit': 'J'},
+            'dG':      {'init': 0.5,    'min': 0,      'max': 5,   'unit': 'eV'},
         },
         'latex': r"$J_{\mathrm{ionic}} \propto \frac{E}{T} \exp\left( \frac{-\Delta G^{\neq}}{kT} \right)$"
     },
