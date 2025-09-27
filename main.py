@@ -25,8 +25,8 @@ import tkinter.font as tkfont  # Font handling for Tkinter
 
 # --- Local Application Imports ---
 from models import models           # Model definitions. Contains the functions and parameters for fitting models.
-from fit_logic import load_txtfile, perform_fit, performFitByModel  # File parsing and fitting logic
-from ParamDialog import info_messagebox, error_messagebox, ask_integer  # Dialog for setting parameter bounds interactively
+from fit_logic import load_txtfile, performFit  # File parsing and fitting logic
+from ParamDialog import info_messagebox, error_messagebox  # Dialog for setting parameter bounds interactively
 
 # --- Matplotlib Configuration ---
 # Enable Latex in Matplotlib. Requires a LaTeX installation. Disable if not needed.
@@ -912,15 +912,15 @@ class FitApp(tk.Tk):
                 with warnings.catch_warnings(record=True) as wlist:
                     warnings.simplefilter("always")
                     # Perform combination fit using the temporary model
-                    fit_result = performFitByModel(xs, ys, model1_key, model2_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
+                    fit_result = performFit(xs, ys, model1_key, model_key_b=model2_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
                     if fit_result is None:
                         return
                     func = fit_result.model.eval # Use the model's eval method
                     for w in wlist:
                         fit_warnings += f"Warning: {w.message}\n"
             except Exception as e:
-                    error_messagebox("Fit Error", f"Combination fitting failed ({method}): {e}", font=self.out_fit_sec)
-                    return
+                error_messagebox("Fit Error", f"Combination fitting failed ({method}): {e}", font=self.out_fit_sec)
+                return
 
         else:
             # Single model fit
@@ -928,13 +928,12 @@ class FitApp(tk.Tk):
             if model_key not in models:
                 error_messagebox("Error", "Invalid model selected.", font=self.out_fit_sec)
                 return
-            func = models[model_key]['func']
             
             try:
                 with warnings.catch_warnings(record=True) as wlist:
                     warnings.simplefilter("always")
                     # Perform single model fit
-                    fit_result = perform_fit(xs, ys, model_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
+                    fit_result = performFit(xs, ys, model_key, method=method, T=self.new_temperature.get(), secFont=self.out_fit_sec)
                     if fit_result is None:
                         return
                     for w in wlist:
@@ -942,6 +941,7 @@ class FitApp(tk.Tk):
             except Exception as e:
                 error_messagebox("Fit Error", f"Fitting failed ({method}): {e}", font=self.out_fit_sec)
                 return
+            func = fit_result.model.eval
         
         # Determine state based on subset
         state = "N/A"
@@ -1273,6 +1273,9 @@ class FitApp(tk.Tk):
             file_path = config.get('file_path')
             if file_path and os.path.exists(file_path):
                 self.load_data_from_path(file_path)
+            
+            # Update the LaTeX display to reflect the loaded configuration
+            self.update_latex_display()
 
         except Exception as e:
             print(f"Error loading configuration: {e}")
