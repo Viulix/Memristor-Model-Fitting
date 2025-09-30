@@ -23,6 +23,7 @@ h   = constants.h                      # Planck constant (J·s)
 hbar = constants.hbar                  # Reduced Planck constant (J·s)
 eps0  = constants.epsilon_0            # Vacuum permittivity (F/m)
 π   = np.pi
+m0 = constants.m_e                  # Electron mass (kg)
 
 zeroBuffer = 1e-12
 maxExponent = 200
@@ -35,27 +36,34 @@ def J_schottky(E, A, phi_B, epsilon_r, T):
     J = np.sign(E) * A * T**2 * np.exp(exponent)
     return J
 
-
 def J_fowler_nordheim(E, K_1, K_2, phi_B):
     # https://de.wikipedia.org/wiki/Feldemission
-    phi_B_J = phi_B * q 
-    J = K_1 * (E**2 / phi_B_J) * np.exp(-K_2 * (phi_B_J**1.5) / np.abs(E))
+    J = K_1 * (E**2 / phi_B) * np.exp(-K_2 * (phi_B**1.5) / np.abs(E))
     return J
 
-#### Fehlerhaft. Bedarf Korrektur. (Es passiert kein Fit, sondern verbleibt konstant -> falsch!)
-# Keine Abhängigkeit von E ?? -> soll das Proportional zu E sein? (Annahme: Lineare Beziehung)
+## Does not fit well. Maybe wrong formula? --> There is no factor in front of the exponent; how is this suppose to fit?
 def J_direct_tunneling(E, m_eff, phi_B, kappa, t_ox):
-    phi_B_J = phi_B * q
-    exponent = - (8 * π * np.sqrt(2 * q * np.abs(m_eff) * phi_B_J)) / (3 * h) * kappa * t_ox
+    m_eff_e = m_eff * m0
+    exponent = - (8 * π * np.sqrt(2 * q * np.abs(m_eff_e) * phi_B)) / (3 * h) * kappa * t_ox
     # Clip max exponent to avoid overflow
     exponent = np.clip(exponent, -maxExponent, maxExponent)
-    J = E*np.exp(exponent)
+    J = E * np.exp(exponent)
     return J
 
-### Korrigiert, aber ungenau (?) -> wie ein Dauerhafter Offset. ggf mit Widerstand abgleichen
+## Alternative formula. The one above seems to be incorrect / doesn't fit well.
+def J_direct_tunneling_alt(E, m_eff, phi_B):
+    m_eff_e = m_eff * m0  # in kg
+    exponent = - (4 * np.sqrt(2 * np.abs(m_eff_e)) * (phi_B * q)**1.5) / (3 * q * h * E)
+    # Clip max exponent to avoid overflow
+    exponent = np.clip(exponent, -maxExponent, maxExponent)
+    J = E**2 * np.exp(exponent)
+    return J
+
 def J_ohmic(E, mu, N_C, E_C, E_F, T):
+    # Convert eV to Joules
     E_C_J = E_C * q
     E_F_J = E_F * q
+
     exponent = - (E_C_J - E_F_J) / (kB * T)
     # Clip max exponent to avoid overflow
     exponent = np.clip(exponent, -maxExponent, maxExponent)
@@ -77,7 +85,7 @@ def J_poole_frenkel(E, mu, N_C, phi_T, epsilon_r, T):
 def J_space_charge_limited(E, mu, epsilon_r, theta, d):
     # https://en.wikipedia.org/wiki/Space_charge
     epsilon = eps0 * epsilon_r
-    J = (9.0 / 8.0) * epsilon * mu * theta * (E**2 / d)
+    J = (9.0 / 8.0) * epsilon * mu * theta * (E**2 / d) # Maybe change this d to a constant.
     return J
 
 ### Das sigma_0 ist nicht in der Formel enthalten, sondern wird als Vorfaktor verwendet (da lediglich proportional zu E)
@@ -102,15 +110,21 @@ def J_variable_range_hopping(E, sigma_0, T0, T):
     return sigma_0 * np.exp(exponent) * E
 
 def J_trap_assisted_tunneling(E, A, m_eff, phi_T):
-    phi_T_J = phi_T * q
-    exponent = - 8 * np.pi * np.sqrt(2 * q * np.abs(m_eff)) * (np.abs(phi_T_J))**1.5 / (3 * h * E)
-    # Clip max exponent to avoid overflow
+    exponent = - (8 * np.pi * np.sqrt(2 * m_eff * m0 * q) * phi_T**1.5) / (3 * h * E)
+    # Clip to avoid underflow
     exponent = np.clip(exponent, -maxExponent, maxExponent)
-    J = A * np.exp(exponent)
-    return J
+    return A * np.exp(exponent)
+
 
 def linear_test(E, m, b):
     return m * E + b
+
+def quadratic_test(E, a, b, c):
+    return a * E**2 + b * E + c
+
+def exponential_test(E, A, x0):
+    return A * np.exp(-(E-x0)**2)
+
 
 # Dictionary of models for fitting
 # Each parameter is now a dict with keys: 'init', 'min', 'max'
@@ -136,10 +150,10 @@ models = {
     },
     'Fowler–Nordheim': {
         'func': J_fowler_nordheim,
-        'params': {
-            'K_1':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'A V^-2'},
-            'K_2':   {'init': 1,  'min': 1e-5,  'max': 1e5,  'unit': 'V m^-1 J^-3/2'},
-            'phi_B': {'init': 1,  'min': 0.2,   'max': 3,    'unit': 'eV'},
+        'params': { 
+            'K_1':   {'init': 1,  'min': -1e-5,  'max': 1e5,  'unit': 'J A V^-2'},
+            'K_2':   {'init': 1,  'min': -1e-5,  'max': 1e5,  'unit': 'V^-(0.5) m^-1'},
+            'phi_B': {'init': 1,  'min': 0.2,   'max': 5,    'unit': 'eV'},
         },
         'latex': r"$J_{\mathrm{FN}} = \frac{q^2}{8\pi h \Phi_B} E^2 \exp\left( \frac{-8\pi \sqrt{2qm^*} \, \Phi_B^{3/2}}{3hE} \right)$"
     },
@@ -153,10 +167,18 @@ models = {
         },
         'latex': r"$J_{\mathrm{DT}} \approx \exp\left\{ \frac{-8\pi \sqrt{2q}}{3h} (m^* \Phi_B)^{1/2} \kappa \cdot t_{\mathrm{ox,eq}} \right\}$"
     },
+    'Direct tunneling [ALT]': {
+        'func': J_direct_tunneling_alt,
+        'params': {
+            'm_eff': {'init': 1,   'min': 0.01,        'max': 2,     'unit': '1'},       # relative to m_e
+            'phi_B': {'init': 1,   'min': 0.2,        'max': 3,     'unit': 'eV'},
+        },
+        'latex': r"$J_{\mathrm{DT}} \approx \exp\left\{ \frac{-4\sqrt{2m^*} (\Phi_B)^{3/2}}{3\hbar E} \right\}$"
+        },
     'Ohmic conduction': {
         'func': J_ohmic,
         'params': {
-            'mu':   {'init': 1,      'min': 1e-10,  'max': 1e-3,  'unit': 'm^2/(V s)'},
+            'mu':   {'init': 1,      'min': 1e-10,  'max': 1e-3,  'unit': 'm^2 V^-1 s^-1'},
             'N_C':  {'init': 1e25,      'min': 1e22,   'max': 1e27,  'unit': 'm^-3'},
             'E_C':  {'init': 1,      'min': 0,      'max': 6,     'unit': 'eV'},
             'E_F':  {'init': 1,      'min': 0,      'max': 6,     'unit': 'eV'},
@@ -166,12 +188,12 @@ models = {
     'SCLC': {
         'func': J_space_charge_limited,
         'params': {
-            'mu':        {'init': 1e-6,   'min': 1e-10,  'max': 1e-4,  'unit': 'm^2/(V s)'},
+            'mu':        {'init': 1e-6,   'min': 1e-10,  'max': 1e-4,  'unit': 'm^2 V^-1 s^-1'},
             'epsilon_r': {'init': 6,      'min': 2,      'max': 25,    'unit': '1'},
             'theta':     {'init': 1,      'min': 1e-3,   'max': 1e2,   'unit': '1'},
             'd':         {'init': 10e-9,  'min': 1e-12,  'max': 1e-7,  'unit': 'm'},
         },
-        'latex': r"$J_{\mathrm{SCLC}} = \frac{9}{8} \varepsilon_i \mu \theta \frac{V^2}{d^3}$"
+        'latex': r"$J_{\mathrm{SCLC}} = \frac{9}{8} \varepsilon_i \mu \theta \frac{E^2}{d}$"
     },
     'Ionic conduction': {
         'func': J_ionic,
@@ -184,7 +206,7 @@ models = {
     'Nearest-neighbor hopping': {
         'func': J_nearest_neighbor_hopping,
         'params': {
-            'sigma_0': {'init': 1e-4,   'min': 1e-10,  'max': 1e-2,  'unit': 'S/m'},
+            'sigma_0': {'init': 1e-4,   'min': 1e-10,  'max': 1e-2,  'unit': 'S m^-1'},
             'T0':      {'init': 1e3,    'min': 1e2,    'max': 1e6,   'unit': 'K'},
         },
         'latex': r"$J_{\mathrm{NNH}} = \sigma_0 \exp\left( \frac{-T_0}{T} \right) \cdot E$"
@@ -192,7 +214,7 @@ models = {
     'Variable-range hopping': {
         'func': J_variable_range_hopping,
         'params': {
-            'sigma_0': {'init': 1e-4,   'min': 1e-10,  'max': 1e-2,  'unit': 'S/m'},
+            'sigma_0': {'init': 1e-4,   'min': 1e-10,  'max': 1e-2,  'unit': 'S m^-1'},
             'T0':      {'init': 1e3,    'min': 1e2,    'max': 1e6,   'unit': 'K'},
         },
         'latex': r"$J_{\mathrm{VRH}} = \sigma_0 \exp \left( \frac{-T_0}{T} \right)^{1/4} \cdot E$"
@@ -214,5 +236,21 @@ models = {
         },
         'latex': r"$J = mx + b$"
     },
+    'Quadratic test': {
+        'func': quadratic_test,
+        'params': {
+            'a': {'init': 1, 'min': -np.inf, 'max': np.inf, 'unit': '1'},
+            'b': {'init': 1, 'min': -np.inf, 'max': np.inf, 'unit': '1'},
+            'c': {'init': 1, 'min': -np.inf, 'max': np.inf, 'unit': '1'},
+        },
+        'latex': r"$J = ax^2 + bx + c$"
+    },
+    'Exponential test': {
+        'func': exponential_test,
+        'params': {
+            'A': {'init': 1, 'min': -np.inf, 'max': np.inf, 'unit': '1'},
+            'x0': {'init': 1, 'min': -np.inf, 'max': np.inf, 'unit': '1'},
+        },
+        'latex': r"$J = A \exp(-(x-x_0)^2)$"
+    },
 }
-
