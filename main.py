@@ -292,8 +292,9 @@ class FitApp(tk.Tk):
         elif 'props' in sig.parameters:
             span_args['props'] = dict(alpha=0.3, facecolor='blue')
 
-        self.span_left = SpanSelector(self.ax_left, self.on_select, **span_args)
-        self.span_right = SpanSelector(self.ax_right, self.on_select, **span_args)
+        # Use separate callbacks for each plot to handle different x-axis units
+        self.span_left = SpanSelector(self.ax_left, self.on_select_E, **span_args)
+        self.span_right = SpanSelector(self.ax_right, self.on_select_U, **span_args)
         
         # --- Plot scale controls ---
         scale_frame = ttk.Frame(self)
@@ -662,27 +663,32 @@ class FitApp(tk.Tk):
             self.fig.tight_layout()
             self.canvas.draw()
 
-    def on_select(self, xmin, xmax):
-        """Callback for the SpanSelector to update the selected range."""
+    def on_select_E(self, xmin, xmax):
+        """Callback for the SpanSelector on the E-field plot (left)."""
+        self.update_selection(xmin, xmax)
+
+    def on_select_U(self, xmin, xmax):
+        """Callback for the SpanSelector on the Voltage plot (right)."""
+        try:
+            thickness_nm = float(self.new_thickness.get())
+            if thickness_nm == 0:
+                error_messagebox("Error", "Thickness cannot be zero.", font=self.out_fit_sec)
+                return
+            thickness_m = thickness_nm * 1e-9
+            
+            # Convert selected Voltage range (U) back to Electric Field range (E)
+            e_min = xmin / thickness_m
+            e_max = xmax / thickness_m
+            self.update_selection(e_min, e_max)
+
+        except (ValueError, ZeroDivisionError) as e:
+            error_messagebox("Error", f"Could not convert voltage to E-field. Invalid thickness? Error: {e}", font=self.out_fit_sec)
+
+    def update_selection(self, xmin, xmax):
+        """Unified method to update the application state with a new selected range."""
         if xmin == xmax:
             return
         x0, x1 = sorted([xmin, xmax])
-
-        # Alternative method: check if selection is in voltage range (right plot)
-        try:
-            thickness_m = float(self.new_thickness.get()) * 1e-9
-            # If selection values are in voltage range (much smaller than E-field), convert back
-            if self.current_x is not None:
-                max_voltage = np.max(self.current_x) * thickness_m
-                min_voltage = np.min(self.current_x) * thickness_m
-                # Check if selection is likely from voltage plot (right plot)
-                if abs(x1 - x0) < abs(max_voltage - min_voltage) * 2 and max(abs(x0), abs(x1)) < abs(max_voltage) * 2:
-                    # Convert from voltage back to electric field
-                    x0 = x0 / thickness_m
-                    x1 = x1 / thickness_m
-        except:
-            pass
-        
         self.selected_range = (x0, x1)
         self.range_label.config(text=f"[{x0:.3g}, {x1:.3g}]")
         self.range_min_var.set(f"{x0:.5g}")
