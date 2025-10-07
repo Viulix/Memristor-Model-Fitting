@@ -653,10 +653,10 @@ class FitApp(tk.Tk):
 
             # Achsenbereiche explizit setzen
             if self.current_x is not None:
-                # Linker Plot: E-Field Bereich
+                # Left Plot: E-Field Area
                 self.ax_left.set_xlim(np.min(self.current_x) * 1.1, np.max(self.current_x) * 1.1)
-                
-                # Rechter Plot: Spannungsbereich
+
+                # Right Plot: Voltage Area
                 x_volts_range = self.current_x * thickness_m
                 self.ax_right.set_xlim(np.min(x_volts_range) * 1.1, np.max(x_volts_range) * 1.1)
 
@@ -1006,17 +1006,17 @@ class FitApp(tk.Tk):
 
                 # Remove any leading "J =" or similar to avoid duplication
                 model1_latex = model1_latex.replace("\\approx", "=")
-                model1_latex = model1_latex.replace("\propto", "=")
+                model1_latex = model1_latex.replace("\\propto", "=")
 
                 model2_latex = model2_latex.replace("\\approx", "=")
-                model2_latex = model2_latex.replace("\propto", "=")
+                model2_latex = model2_latex.replace("\\propto", "=")
 
                 model1_latex = model1_latex.split("=")[1] if "=" in model1_latex else model1_latex
                 model2_latex = model2_latex.split("=")[1] if "=" in model2_latex else model2_latex
 
 
                 # Combine the LaTeX expressions
-                latex_string = f"$J = ({model1_latex}) + ({model2_latex})$"
+                latex_string = f"$J = {model1_latex} + {model2_latex}$"
             else:
                 latex_string = r"$\text{Select valid models for combination}$"
         else:
@@ -1174,7 +1174,6 @@ class FitApp(tk.Tk):
                         image = image.resize((icon_size, icon_size), Image.Resampling.LANCZOS)
                         self.icons[button_name] = ImageTk.PhotoImage(image)
                         icon_loaded = True
-                        print(f"Loaded icon for {button_name}: {possible_name}.png")
                         break
                     except Exception as e:
                         print(f"Failed to load {possible_name}.png for {button_name}: {e}")
