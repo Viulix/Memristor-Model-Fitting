@@ -46,17 +46,39 @@ def performFit(x, y, model_key_a, model_key_b=None, method='leastsq', T=None, pr
         if model_key_b not in models:
             raise KeyError(f"Model '{model_key_b}' not found in models dictionary.")
         
+        # Always use prefixes to avoid parameter name conflicts
         model1 = Model(models[model_key_a]['func'], independent_vars=['E'], prefix='m1_')
         model2 = Model(models[model_key_b]['func'], independent_vars=['E'], prefix='m2_')
+        
         model = model1 + model2
         params = model.make_params()
 
-        for p_name in params.keys():
-            if p_name.endswith('_T'): continue
-            model_prefix, orig_name = p_name.split('_', 1)
-            current_model_key = model_key_a if model_prefix == 'm1' else model_key_b
-            dialog_params[p_name] = models[current_model_key]['params'][orig_name]
-            init_dict[p_name] = float(dialog_params[p_name].get('init', 1.0))
+        # Find shared parameter names (without prefixes)
+        params_a = set(models[model_key_a]['params'].keys())
+        params_b = set(models[model_key_b]['params'].keys())
+        if model_key_a == model_key_b:
+            # If both models are the same, all parameters need to be distinguished, so no shared parameters
+            shared_params = set()
+        else:
+            shared_params = params_a & params_b
+        
+        # Collect parameters for dialog - only show shared parameters once
+        for original_name in params_a | params_b:
+            if original_name in shared_params:
+                # For shared parameters, only show once (use m1_ prefix)
+                dialog_params[original_name] = models[model_key_a]['params'][original_name]
+                init_dict[original_name] = float(dialog_params[original_name].get('init', 1.0))
+            else:
+                # For unique parameters, show with prefix
+                if original_name in params_a:
+                    prefixed_name = 'm1_' + original_name
+                    dialog_params[prefixed_name] = models[model_key_a]['params'][original_name]
+                    init_dict[prefixed_name] = float(dialog_params[prefixed_name].get('init', 1.0))
+                if original_name in params_b:
+                    prefixed_name = 'm2_' + original_name
+                    dialog_params[prefixed_name] = models[model_key_b]['params'][original_name]
+                    init_dict[prefixed_name] = float(dialog_params[prefixed_name].get('init', 1.0))
+            
     else:
         # Single model fit
         selected_model = models[model_key_a]
@@ -75,14 +97,32 @@ def performFit(x, y, model_key_a, model_key_b=None, method='leastsq', T=None, pr
         root.destroy()
         return None  # User cancelled the dialog
     if hasattr(dialog, 'result'):
-        for name, (lo, init, hi) in dialog.result.items():
-            try:
-                params[name].set(value=init, min=lo, max=hi)
-            except Exception as e:
-                print(f"Warning: Could not set '{name}': {e}")
+        if is_combination:
+            # Find shared parameters again
+            params_a = set(models[model_key_a]['params'].keys())
+            params_b = set(models[model_key_b]['params'].keys())
+            shared_params = params_a & params_b
+            
+            for name, (lo, init, hi) in dialog.result.items():
+                try:
+                    # Check if this is a shared parameter (no prefix in dialog)
+                    if name in shared_params:
+                        # Set m1_ version with bounds
+                        params['m1_' + name].set(value=init, min=lo, max=hi)
+                        # Constrain m2_ version to equal m1_ version
+                        params['m2_' + name].set(expr='m1_' + name)
+                    else:
+                        # Non-shared parameter, set directly
+                        params[name].set(value=init, min=lo, max=hi)
+                except Exception as e:
+                    print(f"Warning: Could not set '{name}': {e}")
+        else:
+            for name, (lo, init, hi) in dialog.result.items():
+                try:
+                    params[name].set(value=init, min=lo, max=hi)
+                except Exception as e:
+                    print(f"Warning: Could not set '{name}': {e}")
     root.destroy()
-    x = np.asarray(x, float)
-    y = np.asarray(y, float)
     if T is not None:
         if is_combination:
             # Add T as a fixed parameter to both sub-models if they use it.
