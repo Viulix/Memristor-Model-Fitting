@@ -6,6 +6,7 @@ import datetime                    # For handling timestamps and time formatting
 import sys                         # System-specific parameters and functions
 import os                          # For file path operations
 import json                        # For saving and loading configuration
+import asyncio                     # For debouncing input events
 
 # --- Third-Party Imports ---
 import numpy as np                 # Numerical computing
@@ -42,6 +43,7 @@ class FitApp(tk.Tk):
         self.title("Data Fitting App")
         self.state('zoomed')
         self.config_file = "config.json"
+        self.bounds_file = "parameter_bounds.json"  # Add this line
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
         # --- Set up the main window layout and style ---
         font_size = 12
@@ -95,7 +97,7 @@ class FitApp(tk.Tk):
         self.neg_return_index = None
         self.zero_index = None
 
-        # Rohdaten speichern
+        # Store raw data
         self.raw_x = None
         self.raw_y = None
         
@@ -111,8 +113,11 @@ class FitApp(tk.Tk):
         self.right_scale_var = tk.StringVar(value="log")
 
         # --- File selection ---
-        file_frame = ttk.Frame(self)
+        file_frame = ttk.Frame(self, height=40)
+        file_frame.pack_propagate(False)
+
         file_frame.pack(padx=10, pady=5, fill='x')
+        
         ttk.Label(file_frame, text="Data file:").pack(side='left')
         self.file_var = tk.StringVar()
         file_entry = ttk.Entry(file_frame, textvariable=self.file_var, width=60, font=self.out_fit_sec)
@@ -131,10 +136,6 @@ class FitApp(tk.Tk):
         self.new_temperature = tk.StringVar(value="300")
         ttk.Entry(file_frame, textvariable=self.new_temperature, width=5, font=self.out_fit_sec).pack(side='left', padx=5)
 
-        # Update Area/Thickness triggers
-        self.new_area.trace_add("write", lambda *args: self.on_area_thickness_change())
-        self.new_thickness.trace_add("write", lambda *args: self.on_area_thickness_change())
-
         # --- Subset selection ---
         subset_frame = ttk.Frame(self)
         subset_frame.pack(padx=10, pady=5, fill='x')
@@ -150,58 +151,52 @@ class FitApp(tk.Tk):
         # --- Model selection and fit actions ---
         action_frame = ttk.Frame(self)
         action_frame.pack(padx=10, pady=5, fill='x')
-        ttk.Label(action_frame, text="Model:").pack(side='left')
+        
+        # Left side: Model selection
+        model_frame = ttk.Frame(action_frame)
+        model_frame.pack(side='left', fill='x')
+        
+        ttk.Label(model_frame, text="Model:").pack(side='left')
         self.model_var = tk.StringVar()
         model_names = list(models.keys())
         if model_names:
             self.model_var.set(model_names[0])
-        model_menu = ttk.OptionMenu(action_frame, self.model_var, model_names[0] if model_names else "", *model_names, command= lambda _: self.update_latex_display())
+        model_menu = ttk.OptionMenu(model_frame, self.model_var, model_names[0] if model_names else "", *model_names, command= lambda _: self.update_latex_display())
         model_menu["menu"].config(font=self.out_fit_sec)
         style.configure("Custom.TMenubutton", font=self.out_fit_sec)
         model_menu.configure(style="Custom.TMenubutton")
         model_menu.pack(side='left', padx=5)
 
-        # --- Combination fit selection (top right) ---
-        combo_frame = ttk.Frame(action_frame)
-        combo_frame.pack(side='right', padx=5)
-        
-
-        # Checkbox to enable combination fitting
+        # Combination fit checkbox (with larger font)
         self.enable_combo_var = tk.BooleanVar(value=False)
-        combo_label_frame = ttk.Frame(combo_frame)
-        combo_label_frame.pack(side='top', anchor='e')
-        
-        ttk.Label(combo_label_frame, text="Combination Fit:", font=self.default_font).pack(side='left')
-        combo_checkbox = ttk.Checkbutton(combo_label_frame, text="Active", variable=self.enable_combo_var, command=self.update_latex_display)
-        combo_checkbox.pack(side='left', padx=(5, 240))
-        
-        # Frame for the two model selectors
-        combo_selectors_frame = ttk.Frame(combo_frame)
-        combo_selectors_frame.pack(side='top', anchor='e', pady=2)
+        combo_checkbox = ttk.Checkbutton(model_frame, text="Combination", variable=self.enable_combo_var, command=self.update_latex_display)
+        combo_checkbox.pack(side='left', padx=(10, 5))
         
         # First model selector
-        ttk.Label(combo_selectors_frame, text="Model 1:").pack(side='left')
         self.combo_model1_var = tk.StringVar()
         if model_names:
             self.combo_model1_var.set(model_names[0])
-        combo1_menu = ttk.OptionMenu(combo_selectors_frame, self.combo_model1_var, model_names[0] if model_names else "", *model_names, command=lambda _: self.update_latex_display())
-        combo1_menu["menu"].config(font=self.out_fit_sec)
-        combo1_menu.configure(style="Custom.TMenubutton")
-        combo1_menu.pack(side='left', padx=2)
+        self.combo1_menu = ttk.OptionMenu(model_frame, self.combo_model1_var, model_names[0] if model_names else "", *model_names, command=lambda _: self.update_latex_display())
+        self.combo1_menu["menu"].config(font=self.out_fit_sec)
+        self.combo1_menu.configure(style="Custom.TMenubutton")
+        
+        # Plus sign label between models
+        self.plus_label = ttk.Label(model_frame, text="+", font=self.default_font)
         
         # Second model selector
-        ttk.Label(combo_selectors_frame, text="Model 2:").pack(side='left')
         self.combo_model2_var = tk.StringVar()
         if len(model_names) > 1:
             self.combo_model2_var.set(model_names[1])
         elif model_names:
             self.combo_model2_var.set(model_names[0])
-        combo2_menu = ttk.OptionMenu(combo_selectors_frame, self.combo_model2_var, model_names[0] if model_names else "", *model_names, command=lambda _: self.update_latex_display())
-        combo2_menu["menu"].config(font=self.out_fit_sec)
-        combo2_menu.configure(style="Custom.TMenubutton")
-        combo2_menu.pack(side='left', padx=2)
+        self.combo2_menu = ttk.OptionMenu(model_frame, self.combo_model2_var, model_names[0] if model_names else "", *model_names, command=lambda _: self.update_latex_display())
+        self.combo2_menu["menu"].config(font=self.out_fit_sec)
+        self.combo2_menu.configure(style="Custom.TMenubutton")
+        
+        # Initially hide combo selectors
+        self.update_combo_visibility()
 
-        # Fit method selection
+        # Fit method and action buttons
         ttk.Label(action_frame, text="Fit Method:").pack(side='left', padx=(20, 0))
         self.fitmethod_var = tk.StringVar()
         method_options = ["leastsq", "least_squares", "ampgo", "nelder", "powell", "differential_evolution", "basinhopping"]
@@ -239,7 +234,7 @@ class FitApp(tk.Tk):
         self.range_label = ttk.Label(range_frame, text="None")
         self.range_label.pack(side='left', padx=5)
 
-        # Input for manual range setting
+        # --- Input for manual range setting ---
         ttk.Label(range_frame, text="From:").pack(side='left', padx=(10,0))
         self.range_min_var = tk.StringVar()
         ttk.Entry(range_frame, textvariable=self.range_min_var, width=10, font=self.out_fit_sec).pack(side='left')
@@ -252,11 +247,16 @@ class FitApp(tk.Tk):
                                   image=self.icons.get('range'), compound='left')
         setRangeButton.pack(side='left', padx=5)
 
+        fullRangeButton = ttk.Button(range_frame, text="Full Range", command=self.set_full_range,
+                                    image=self.icons.get('range'), compound='left')
+        fullRangeButton.pack(side='left', padx=5)
+        
+
+        # --- Temporary Fit Controls ---
         delTempFitButton = ttk.Button(range_frame, text="Delete Temp. Fit", command=self.apply_subset,
                                     image=self.icons.get('delete'), compound='left')
         delTempFitButton.pack(side='left', padx=5)
         
-
         # --- Fit list display ---
         fit_list_frame = ttk.Frame(self)
         fit_list_frame.pack(padx=10, pady=5, fill='x', expand=False)
@@ -271,20 +271,12 @@ class FitApp(tk.Tk):
         separator = ttk.Separator(self, orient='horizontal')
         separator.pack(fill='x', padx=10, pady=5)
         
-        # --- Model LaTeX equation display ---
-        self.latex_frame = ttk.Frame(self)
-        self.latex_frame.pack(padx=10, pady=5, fill='x')
-        ttk.Label(self.latex_frame, text="Model Equation:").pack(side='left')
-
-        # Initialanzeige
-        self.update_latex_display()
-
         # --- Plot area ---
         self.fig, (self.ax_left, self.ax_right) = plt.subplots(1, 2, figsize=(12, 4))
         self.canvas = FigureCanvasTkAgg(self.fig, master=self)
         self.canvas.get_tk_widget().pack(padx=10, pady=10, fill='both', expand=True)
 
-        # Initialize SpanSelectors auf beiden Plots
+        # Initialize SpanSelectors for both plots
         sig = inspect.signature(SpanSelector)
         span_args = {'direction': 'horizontal', 'useblit': True}
         if 'rectprops' in sig.parameters:
@@ -320,21 +312,40 @@ class FitApp(tk.Tk):
         # --- Fit Result Header ---
         header_font = tkfont.Font(family="Segoe UI", size=font_size + 4, weight="bold")
         header_label = tk.Label(self, text="Fit Result", font=header_font, bg="white")
-        header_label.pack(padx=10, pady=(5, 0), anchor='w')
+        header_label.pack(padx=10, pady=(5, 2), anchor='w')
         
         # --- Results text (side-by-side) ---
         result_frame = ttk.Frame(self)
-        result_frame.pack(padx=10, pady=5, fill='x')
+        result_frame.pack(padx=10, pady=(0, 5), fill='both', expand=True)
 
         self.result_text = tk.Text(result_frame, height=16, wrap='word', font=self.out_fit_sec, width=40)
-        self.result_text.pack(side='left')
-        self.result_text.bind("<Key>", lambda e: "break")  # Alle Tastatureingaben blockieren
-        self.result_text.config(cursor="arrow")  # Cursor auf Pfeil setzen, um Eingabe zu verhindern
+        self.result_text.pack(side='left', fill='both')
+        self.result_text.bind("<Key>", lambda e: "break")  # Block all keyboard input
+        self.result_text.config(cursor="arrow")  # Set cursor to arrow to prevent input
 
         self.result_text2 = tk.Text(result_frame, height=16, wrap='word', font=self.out_fit_sec, width=40)
-        self.result_text2.pack(side='left', fill='x', expand=True)
+        self.result_text2.pack(side='left', fill='both', padx=(5, 0))
         self.result_text2.bind("<Key>", lambda e: "break")
         self.result_text2.config(cursor="arrow")
+
+        # --- Model Equation LaTeX display (on the right side of result_frame) ---
+        self.latex_frame = ttk.Frame(result_frame)
+        self.latex_frame.pack(side='left', padx=(10, 0), fill='y', anchor='n')
+        
+        # Left-aligned header
+        latex_header = ttk.Label(self.latex_frame, text="Model Equation:", font=self.default_font)
+        latex_header.pack(anchor='w', pady=(0, 5))
+        
+        # Container for the equation image (left-aligned below header)
+        self.latex_image_frame = ttk.Frame(self.latex_frame)
+        self.latex_image_frame.pack(anchor='w', fill='both')
+
+        # Update Area/Thickness triggers
+        self.new_area.trace_add("write", lambda *args: self.on_area_thickness_change())
+        self.new_thickness.trace_add("write", lambda *args: self.on_area_thickness_change())
+
+        # Initial Display
+        self.update_latex_display()
 
         # Load configuration at the end of initialization
         self.load_config()
@@ -408,6 +419,7 @@ class FitApp(tk.Tk):
     def on_area_thickness_change(self):
         """Callback wenn Area oder Thickness geändert werden."""
         if self.raw_x is not None and self.raw_y is not None:
+            asyncio.sleep(3)  # Debounce
             self.update_scaled_data()
             self.apply_subset()
 
@@ -987,8 +999,22 @@ class FitApp(tk.Tk):
         except Exception as e:
             error_messagebox("Error", f"Failed to generate fit curve: {e}", font=self.out_fit_sec)
 
+    def update_combo_visibility(self):
+        """Show or hide combination model selectors based on checkbox state."""
+        if self.enable_combo_var.get():
+            self.combo1_menu.pack(side='left', padx=2)
+            self.plus_label.pack(side='left', padx=5)
+            self.combo2_menu.pack(side='left', padx=2)
+        else:
+            self.combo1_menu.pack_forget()
+            self.plus_label.pack_forget()
+            self.combo2_menu.pack_forget()
+
     def update_latex_display(self, font_size=12, dpi=150):
         """Update the LaTeX display based on the selected model(s)."""
+        # Update combo visibility first
+        self.update_combo_visibility()
+        
         if self.enable_combo_var.get():
             # Show combination model equation
             model1_key = self.combo_model1_var.get()
@@ -1034,7 +1060,7 @@ class FitApp(tk.Tk):
         fig.patch.set_visible(False)
         ax.axis('off')
 
-        # Set LaTeX text
+        # Set LaTeX text with larger font
         ax.text(0.5, 0.5, latex_string, fontsize=font_size, ha='center', va='center')
 
         # Save image to BytesIO
@@ -1047,11 +1073,11 @@ class FitApp(tk.Tk):
         image = Image.open(buf)
         photo = ImageTk.PhotoImage(image)
 
-        # Create Tkinter label
-        label = tk.Label(self.latex_frame, image=photo, bg='white')
+        # Create Tkinter label in the image frame (centered)
+        label = tk.Label(self.latex_image_frame, image=photo, bg='white')
         label.image = photo  # Keep reference so image doesn't get deleted
         self.latex_label = label
-        self.latex_label.pack(side='left', padx=5)
+        self.latex_label.pack()
 
     def export_fit_data(self):
         """Export the fit data to a text file with calculated I and U values."""
@@ -1285,6 +1311,14 @@ class FitApp(tk.Tk):
         except Exception as e:
             print(f"Error loading configuration: {e}")
 
+    def set_full_range(self):
+        """Set the selected range to the full data range."""
+        if self.current_x is None:
+            error_messagebox("Error", "No data loaded. Please load a data file first.", font=self.out_fit_sec)
+            return
+        x_min = np.min(self.current_x)
+        x_max = np.max(self.current_x)
+        self.update_selection(x_min, x_max)
 # Start up
     def on_closing(self):
         self.save_config()
