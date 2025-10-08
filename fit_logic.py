@@ -11,6 +11,8 @@ import numpy as np
 from lmfit import Model
 from models import models
 from BoundsDialog import BoundsDialog
+import json
+import os
 # As overview of fitting methods and the used libary, see:
 # https://lmfit.github.io/lmfit-py/fitting.html
 
@@ -27,6 +29,62 @@ def load_txtfile(pfad, delimiter=None, skiprows=3, usecols=(0, 1)):
     x = data[:, 0]
     y = data[:, 1]
     return x, y
+
+def get_bounds_file_path():
+    """Get the path to the bounds configuration file."""
+    return os.path.join(os.path.dirname(__file__), 'parameter_bounds.json')
+
+def save_parameter_bounds(bounds_dict, model_key):
+    """
+    Save parameter bounds to a JSON file.
+    
+    Parameters:
+    - bounds_dict: Dictionary mapping parameter names to (lo, init, hi, fixed) tuples
+    - model_key: String identifier for the model (or combined model key)
+    """
+    bounds_file = get_bounds_file_path()
+    
+    # Load existing bounds
+    try:
+        with open(bounds_file, 'r') as f:
+            all_bounds = json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        all_bounds = {}
+    
+    # Convert bounds to serializable format
+    serializable_bounds = {}
+    for name, (lo, init, hi, fixed) in bounds_dict.items():
+        serializable_bounds[name] = {
+            'lo': str(lo) if np.isfinite(lo) else ('-inf' if lo < 0 else 'inf'),
+            'init': str(init),
+            'hi': str(hi) if np.isfinite(hi) else ('-inf' if hi < 0 else 'inf'),
+            'fixed': fixed
+        }
+    
+    # Save under model key
+    all_bounds[model_key] = serializable_bounds
+    
+    with open(bounds_file, 'w') as f:
+        json.dump(all_bounds, f, indent=4)
+
+def load_parameter_bounds(model_key):
+    """
+    Load parameter bounds from JSON file.
+    
+    Parameters:
+    - model_key: String identifier for the model (or combined model key)
+    
+    Returns:
+    - Dictionary mapping parameter names to bound dictionaries, or empty dict if not found
+    """
+    bounds_file = get_bounds_file_path()
+    
+    try:
+        with open(bounds_file, 'r') as f:
+            all_bounds = json.load(f)
+        return all_bounds.get(model_key, {})
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 def performFit(x, y, model_key_a, model_key_b=None, method='leastsq', T=None, primFont=None, secFont=None):
     """
@@ -64,6 +122,7 @@ def performFit(x, y, model_key_a, model_key_b=None, method='leastsq', T=None, pr
         
         # Collect parameters for dialog - only show shared parameters once
         for original_name in params_a | params_b:
+            # Only add parameters that are in the model and not fixed
             if original_name in shared_params:
                 # For shared parameters, only show once (use m1_ prefix)
                 dialog_params[original_name] = models[model_key_a]['params'][original_name]
@@ -84,18 +143,32 @@ def performFit(x, y, model_key_a, model_key_b=None, method='leastsq', T=None, pr
         selected_model = models[model_key_a]
         model = Model(selected_model['func'], independent_vars=['E'])
         dialog_params = selected_model['params']
-        init_dict = {name: float(data.get('init', 1.0)) for name, data in dialog_params.items()}
+        # Only add parameters that are in the model and not fixed
+        init_dict = {name: float(data.get('init', 1.0)) for name, data in dialog_params.items() if not data.get('fixed', False)}
         params = model.make_params(**init_dict)
 
+    # Determine combined model key for saving/loading bounds
+    if is_combination:
+        combined_model_key = f"{model_key_a}+{model_key_b}"
+    else:
+        combined_model_key = model_key_a
+    
+    # Load saved bounds
+    saved_bounds = load_parameter_bounds(combined_model_key)
+    
     # Dialog for parameter bounds
     root = tk.Tk()
     root.withdraw()
 
-    # Invoke dialog
-    dialog = BoundsDialog(root, 'Set Parameter Bounds', dialog_params, init_dict, primFont, secFont)
+    # Invoke dialog with saved bounds
+    dialog = BoundsDialog(root, 'Set Parameter Bounds', dialog_params, init_dict, saved_bounds, primFont, secFont)
     if dialog.result is None:
         root.destroy()
         return None  # User cancelled the dialog
+    
+    # Save the bounds for next time
+    save_parameter_bounds(dialog.result, combined_model_key)
+    
     if hasattr(dialog, 'result'):
         if is_combination:
             # Find shared parameters again
@@ -103,23 +176,34 @@ def performFit(x, y, model_key_a, model_key_b=None, method='leastsq', T=None, pr
             params_b = set(models[model_key_b]['params'].keys())
             shared_params = params_a & params_b
             
-            for name, (lo, init, hi) in dialog.result.items():
+            for name, (lo, init, hi, is_fixed) in dialog.result.items():
                 try:
                     # Check if this is a shared parameter (no prefix in dialog)
                     if name in shared_params:
-                        # Set m1_ version with bounds
-                        params['m1_' + name].set(value=init, min=lo, max=hi)
-                        # Constrain m2_ version to equal m1_ version
-                        params['m2_' + name].set(expr='m1_' + name)
+                        # Set m1_ version with bounds or as fixed
+                        if not is_fixed:
+                            params['m1_' + name].set(value=init, min=lo, max=hi)
+                            # Constrain m2_ version to equal m1_ version
+                            params['m2_' + name].set(expr='m1_' + name)
+                        else:
+                            # If fixed, add both m1 and m2 versions independently as fixed values
+                            params.add('m1_' + name, value=init, vary=False)
+                            params.add('m2_' + name, value=init, vary=False)
                     else:
                         # Non-shared parameter, set directly
-                        params[name].set(value=init, min=lo, max=hi)
+                        if is_fixed:
+                            params.add(name, value=init, vary=False)
+                        else:
+                            params[name].set(value=init, min=lo, max=hi)
                 except Exception as e:
                     print(f"Warning: Could not set '{name}': {e}")
         else:
-            for name, (lo, init, hi) in dialog.result.items():
+            for name, (lo, init, hi, is_fixed) in dialog.result.items():
                 try:
-                    params[name].set(value=init, min=lo, max=hi)
+                    if is_fixed:
+                        params.add(name, value=init, vary=False)
+                    else:
+                        params[name].set(value=init, min=lo, max=hi)
                 except Exception as e:
                     print(f"Warning: Could not set '{name}': {e}")
     root.destroy()
@@ -135,4 +219,3 @@ def performFit(x, y, model_key_a, model_key_b=None, method='leastsq', T=None, pr
             params.add('T', value=float(T), vary=False)
 
     return model.fit(y, params, E=x, method=method)
-
